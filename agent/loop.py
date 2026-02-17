@@ -84,47 +84,81 @@ Never return JSON.
             system_instruction=system_prompt,
         ),
     )
-
+    
     while True:
-        user_input = input("\nYou: ")
-        if user_input.lower() == "quit":
-            break
+      user_input = input("\nYou: ")
+      if user_input.lower() == "quit":
+          break
 
-        cache_key = user_input.lower()
-        cached_response = get_cache(cache_key)
-        if cached_response:
-            print("\n🤖 (cached) " + cached_response)
-            continue
+      cache_key = user_input.lower()
+      cached_response = get_cache(cache_key)
+      if cached_response:
+          print("\n🤖 (cached) " + cached_response)
+          continue
 
-        response = chat.send_message(user_input)
+      response = chat.send_message(user_input)
 
-        # Process tool calls, convert them to plain text BEFORE sending back
-        while response.function_calls:
-            tool_texts = []
-            for call in response.function_calls:
-                # Run the tool
-                result = TOOL_FUNCTIONS[call.name](**dict(call.args))
+    # Process tool calls, convert them to plain text BEFORE sending back
+      while response.function_calls:
+          tool_texts = []
 
-                # Convert dict/tool result into human-readable text
-                if isinstance(result, dict):
-                    plain_result = []
-                    for k, v in result.items():
-                        if isinstance(v, list):
-                            plain_result.append(f"{k.capitalize()}: {', '.join(v)}")
-                        else:
-                            plain_result.append(f"{k.capitalize()}: {v}")
-                    result_text = "; ".join(plain_result)
-                else:
-                    result_text = str(result)
+          for call in response.function_calls:
+            # Run the tool
+              result = TOOL_FUNCTIONS[call.name](**dict(call.args))
 
-                tool_texts.append(result_text)
+            # Convert dict/tool result into human-readable text
+              if isinstance(result, dict):
+                  plain_result = []
 
-            # Send plain text summary of tool results back to AI
-            response = chat.send_message("\n".join(tool_texts))
+                  for k, v in result.items():
 
-        ttl = get_ttl(user_input)
-        # Cache the final AI response
-        set_cache(cache_key, response.text, ttl)
-        
-        # Print AI response directly
-        print("\n🤖", response.text)
+                    # CASE 1 → value is a list
+                      if isinstance(v, list):
+                          clean_list = []
+
+                          for item in v:
+                            # لو العنصر dict (وهذا سبب الخطأ السابق)
+                              if isinstance(item, dict):
+                                  clean_list.append(
+                                      item.get("name")
+                                      or item.get("title")
+                                      or item.get("value")
+                                      or item.get("address")
+                                      or str(item)
+                                  )
+                              else:
+                                  clean_list.append(str(item))
+
+                          plain_result.append(
+                              f"{k.capitalize()}: {', '.join(clean_list)}"
+                          )
+
+                    # CASE 2 → value is normal value
+                      else:
+                          plain_result.append(f"{k.capitalize()}: {v}")
+  
+                  result_text = "; ".join(plain_result)
+
+            # لو النتيجة ليست dict
+              else:
+                  result_text = str(result)
+  
+              tool_texts.append(result_text)
+
+        # Send plain text summary of tool results back to AI
+          tool_summary = "\n".join(tool_texts)
+
+          response = chat.send_message(
+            "Here are the tool results:\n"
+            f"{tool_summary}\n\n"
+            "Use this information to answer the user."
+            )
+
+
+      ttl = get_ttl(user_input)
+
+    # Cache the final AI response
+      set_cache(cache_key, response.text, ttl)
+
+    # Print AI response directly
+      print("\n🤖", response.text)
