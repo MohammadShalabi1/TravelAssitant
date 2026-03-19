@@ -60,5 +60,3 @@ def set_cache(query, answer, ttl=3600):
     })
 
     print("[SMART CACHE SAVED]")
-
-

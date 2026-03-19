@@ -8,7 +8,7 @@ load_dotenv()
 gemini_key = os.getenv("GEMINI_API_KEY")
 
 def main():
-    client = genai.Client(api_key='//////////')
+    client = genai.Client(api_key='//////')
     run_agentic_loop(client)
 
 if __name__ == "__main__":
