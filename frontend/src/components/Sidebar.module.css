@@ -1,0 +1,92 @@
+.sidebar {
+  width: 248px;
+  min-width: 248px;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  padding: 24px 14px;
+  gap: 4px;
+}
+
+.logo {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 19px;
+  color: var(--accent);
+  letter-spacing: -0.4px;
+  padding: 0 8px 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.dot { color: var(--accent2); }
+
+.label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 1.6px;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  padding: 16px 8px 6px;
+}
+
+.nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  border-radius: var(--radius-sm);
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-family: var(--font-body);
+  font-size: 13.5px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  text-align: left;
+  width: 100%;
+}
+
+.item:hover {
+  background: var(--surface2);
+  color: var(--text);
+}
+
+.item.active {
+  background: var(--accent-dim);
+  color: var(--accent);
+}
+
+.itemDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-faint);
+  flex-shrink: 0;
+  transition: background 0.15s;
+}
+
+.item.active .itemDot { background: var(--accent); }
+
+.newBtn {
+  margin-top: auto;
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px dashed rgba(62, 207, 178, 0.3);
+  background: transparent;
+  color: var(--accent);
+  font-family: var(--font-body);
+  font-size: 13.5px;
+  cursor: pointer;
+  transition: background 0.15s;
+  text-align: left;
+}
+
+.newBtn:hover { background: var(--accent-dim); }
