@@ -1,15 +1,16 @@
-from dotenv import load_dotenv
-from google import genai
+import sys
 import os
 
-from agent.loop import run_agentic_loop
+# Tell Python to look inside the backend folder for modules
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "backend"))
 
-load_dotenv()
-gemini_key = os.getenv("GEMINI_API_KEY")
-
-def main():
-    client = genai.Client(api_key='///')
-    run_agentic_loop(client)
+import uvicorn
 
 if __name__ == "__main__":
-    main()
+    uvicorn.run(
+        "backend.api:app",
+        host="0.0.0.0",
+        port=8000,
+        reload=True,
+        reload_dirs=["backend"]
+    )

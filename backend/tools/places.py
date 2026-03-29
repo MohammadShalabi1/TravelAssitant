@@ -3,12 +3,18 @@ from tools.schemas import NearbyPlaces, POI, GetNearbyPlacesInput
 
 def get_nearby_places(**kwargs):
     args = GetNearbyPlacesInput(**kwargs)
+    
+    if "=" in args.tag_filter:
+      key, value = args.tag_filter.split("=")
+    else:
+     key = "amenity"
+     value = args.tag_filter
 
     query = f"""
-    [out:json];
-    node(around:{args.radius},{args.lat},{args.lon})["{args.tag_filter}"];
-    out;
-    """
+     [out:json];
+     node(around:{args.radius},{args.lat},{args.lon})["{key}"="{value}"];
+     out;
+     """
 
     try:
         res = requests.post(

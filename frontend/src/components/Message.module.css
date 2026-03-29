@@ -1,0 +1,78 @@
+.row {
+  display: flex;
+  gap: 11px;
+  animation: fadeUp 0.28s ease both;
+}
+
+.row.user { flex-direction: row-reverse; }
+
+.avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  margin-top: 3px;
+}
+
+.avatarBot  { background: var(--accent-dim); }
+.avatarUser { background: var(--accent2-dim); }
+
+.bubble {
+  max-width: 68%;
+  padding: 12px 16px;
+  border-radius: var(--radius);
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.bubbleBot {
+  background: #13201a;
+  border: 1px solid rgba(62, 207, 178, 0.1);
+  border-top-left-radius: 4px;
+}
+
+.bubbleUser {
+  background: #1a2e42;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-top-right-radius: 4px;
+}
+
+.badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-bottom: 8px;
+}
+
+.badgeTool {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 5px;
+  font-size: 11px;
+  font-weight: 500;
+  background: var(--accent2-dim);
+  color: var(--accent2);
+  border: 1px solid rgba(240, 160, 90, 0.2);
+}
+
+.badgeCached {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 5px;
+  font-size: 11px;
+  font-weight: 500;
+  background: var(--accent-dim);
+  color: var(--accent);
+  border: 1px solid var(--accent-glow);
+}
+
+.text {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
