@@ -1,0 +1,31 @@
+.banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 28px 12px;
+  padding: 10px 14px;
+  background: var(--danger-dim);
+  border: 1px solid rgba(224, 90, 106, 0.25);
+  border-radius: var(--radius-sm);
+  color: var(--danger);
+  font-size: 13px;
+  animation: fadeUp 0.2s ease both;
+}
+
+.icon { flex-shrink: 0; }
+
+.text { flex: 1; }
+
+.close {
+  background: transparent;
+  border: none;
+  color: var(--danger);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 4px;
+  border-radius: 4px;
+  opacity: 0.7;
+  transition: opacity 0.15s;
+}
+
+.close:hover { opacity: 1; }
