@@ -182,7 +182,7 @@ def list_sessions(current_user: CurrentUser = Depends(get_current_user)):
     except psycopg2.Error as e:
         raise HTTPException(status_code=503, detail=f"Database error: {e}")
     return SessionsListResponse(sessions=[
-        SessionItem(session_id=str(r[0]), created_at=str(r[1])) for r in rows
+    SessionItem(session_id=str(r["session_id"]), created_at=str(r["created_at"])) for r in rows
     ])
 
 @app.patch("/api/sessions/{session_id}/rename", status_code=204, tags=["sessions"])
