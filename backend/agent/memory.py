@@ -20,13 +20,16 @@ from typing import Optional
 import psycopg2
 import psycopg2.extras
 from psycopg2.extensions import connection as PGConnection
-
+from dotenv import load_dotenv
 from core.logger import get_logger
 
 log = get_logger(__name__)
 
-DATABASE_URL: str = os.environ["DATABASE_URL"]   # must be set; fail fast if not
 
+
+load_dotenv()
+
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 # ── Connection helper ─────────────────────────────────────────────────────────
 
