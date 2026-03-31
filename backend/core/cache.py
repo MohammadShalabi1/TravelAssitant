@@ -21,7 +21,8 @@ import numpy as np
 from sentence_transformers import SentenceTransformer
 
 from core.logger import get_logger
-
+from dotenv import load_dotenv
+load_dotenv()
 log = get_logger(__name__)
 
 # ── Config ────────────────────────────────────────────────────────────────────
