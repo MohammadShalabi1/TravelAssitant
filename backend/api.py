@@ -181,8 +181,9 @@ def list_sessions(current_user: CurrentUser = Depends(get_current_user)):
         rows = get_all_sessions(user_id=current_user.user_id)
     except psycopg2.Error as e:
         raise HTTPException(status_code=503, detail=f"Database error: {e}")
+
     return SessionsListResponse(sessions=[
-    SessionItem(session_id=str(r["session_id"]), created_at=str(r["created_at"])) for r in rows
+        SessionItem(session_id=str(r["session_id"]), created_at=str(r["created_at"])) for r in rows
     ])
 
 @app.patch("/api/sessions/{session_id}/rename", status_code=204, tags=["sessions"])
@@ -255,18 +256,31 @@ async def chat(
 @app.get("/api/sessions/{session_id}/history", response_model=HistoryResponse, tags=["sessions"])
 def get_history(
     session_id: str,
-    limit:  int = Query(default=50, ge=1, le=200),
-    offset: int = Query(default=0,  ge=0),
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
     current_user: CurrentUser = Depends(get_current_user),
 ):
     try:
         rows = load_history(session_id, limit=limit, offset=offset)
     except psycopg2.Error as e:
         raise HTTPException(status_code=503, detail=f"Database error: {e}")
-    if rows is None:
+
+    # Better check (handles empty list)
+    if not rows:
         raise HTTPException(status_code=404, detail="Session not found")
-    messages = [HistoryMessage(role=r, content=c) for r, c in rows if r != "tool"]
-    return HistoryResponse(session_id=session_id, messages=messages, total=len(messages))
+
+    # FIX: use tuple indexing instead of dict keys
+    messages = [
+        HistoryMessage(role=row[0], content=row[1])
+        for row in rows
+        if row[0] != "tool"
+    ]
+
+    return HistoryResponse(
+        session_id=session_id,
+        messages=messages,
+        total=len(messages)
+    )
 
 
 # ── Export (protected) ────────────────────────────────────────────────────────
