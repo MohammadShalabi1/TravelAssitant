@@ -26,7 +26,7 @@ SPAM_WINDOW_SECONDS = 60            # window for identical-message detection
 SPAM_MAX_IDENTICAL = 3              # block after this many identical messages
 
 # ── State ─────────────────────────────────────────────────────────────────────
-_last_session_time: dict[str, float] = {}
+_last_session_time: dict[str, float] = {} #stores the last time a message was sent in a session
 _ip_requests: dict[str, deque] = defaultdict(deque)   # ip → deque of timestamps
 _ip_message_hashes: dict[str, deque] = defaultdict(deque)  # ip → deque of (ts, hash)
 
