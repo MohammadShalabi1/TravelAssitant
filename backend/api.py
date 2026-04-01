@@ -253,7 +253,13 @@ async def chat(
 
 # ── History (protected, paginated) ────────────────────────────────────────────
 
-@app.get("/api/sessions/{session_id}/history", response_model=HistoryResponse, tags=["sessions"])
+
+
+@app.get(
+    "/api/sessions/{session_id}/history",
+    response_model=HistoryResponse,
+    tags=["sessions"]
+)
 def get_history(
     session_id: str,
     limit: int = Query(default=50, ge=1, le=200),
@@ -262,19 +268,33 @@ def get_history(
 ):
     try:
         rows = load_history(session_id, limit=limit, offset=offset)
+
     except psycopg2.Error as e:
-        raise HTTPException(status_code=503, detail=f"Database error: {e}")
+        raise HTTPException(
+            status_code=503,
+            detail=f"Database error: {e}"
+        )
 
-    # Better check (handles empty list)
+    # IMPORTANT: handle None OR empty result safely
     if not rows:
-        raise HTTPException(status_code=404, detail="Session not found")
+        return HistoryResponse(
+            session_id=session_id,
+            messages=[],
+            total=0
+        )
 
-    # FIX: use tuple indexing instead of dict keys
-    messages = [
-        HistoryMessage(role=row[0], content=row[1])
-        for row in rows
-        if row[0] != "tool"
-    ]
+    messages = []
+    for row in rows:
+        role = row[0]
+        content = row[1]
+
+        # skip tool messages
+        if role == "tool":
+            continue
+
+        messages.append(
+            HistoryMessage(role=role, content=content)
+        )
 
     return HistoryResponse(
         session_id=session_id,
