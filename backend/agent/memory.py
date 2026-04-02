@@ -176,7 +176,9 @@ def save_message(session_id: str, role: str, content: str):
             )
         conn.commit()
 
-
+#load the history for a specific session (when clicking on a session in the history bar we need the fetch the messages in that session this what this fct do)
+# limit is the amx messages to return (prevent loading huge nb of messages at once )
+#-> list[tuple] tells you what it returns: a list of tuples like [("user", "hello"), ("assistant", "hi!")]
 def load_history(
     session_id: str,
     limit: int = 50,
