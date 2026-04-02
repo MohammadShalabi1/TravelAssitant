@@ -1,12 +1,14 @@
-import styles from './TypingIndicator.module.css'
-
 export default function TypingIndicator() {
   return (
-    <div className={styles.row}>
-      <div className={styles.avatar}>🤖</div>
-      <div className={styles.bubble}>
-        <span /><span /><span />
+    <div className="message assistant">
+      <div className="avatar"><span>✈</span></div>
+      <div className="message-body">
+        <div className="bubble typing-bubble">
+          <span className="dot" />
+          <span className="dot" />
+          <span className="dot" />
+        </div>
       </div>
     </div>
-  )
+  );
 }

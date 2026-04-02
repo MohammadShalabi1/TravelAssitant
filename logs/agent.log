@@ -1,1 +1,62 @@
-2026-03-31 12:26:26.131 | INFO     | __main__:init_db:61 - Database schema initialised
+2026-03-31 17:17:48.824 | INFO     | agent.memory:init_db:73 - Database schema initialised
+2026-03-31 17:17:50.660 | INFO     | core.auth:init_auth_db:62 - Auth schema initialised
+2026-03-31 17:17:50.921 | INFO     | backend.api:lifespan:88 - ✅ Database initialised
+2026-03-31 17:17:50.922 | INFO     | backend.api:lifespan:89 - ✅ Gemini client ready
+2026-03-31 17:18:42.257 | INFO     | agent.memory:init_db:73 - Database schema initialised
+2026-03-31 17:18:44.202 | INFO     | core.auth:init_auth_db:62 - Auth schema initialised
+2026-03-31 17:18:44.459 | INFO     | backend.api:lifespan:88 - ✅ Database initialised
+2026-03-31 17:18:44.460 | INFO     | backend.api:lifespan:89 - ✅ Gemini client ready
+2026-03-31 17:18:57.043 | INFO     | middleware.timing:dispatch:36 - GET /api/sessions status=200 ip=127.0.0.1 duration=1.805s
+2026-03-31 17:18:58.807 | INFO     | middleware.timing:dispatch:36 - GET /api/sessions status=200 ip=127.0.0.1 duration=1.761s
+2026-03-31 17:19:08.194 | ERROR    | backend.api:global_exception_handler:109 - Unhandled error on /api/sessions/64c1127f-498a-4bff-9d4f-502ae39cc492/history: tuple indices must be integers or slices, not str
+  + Exception Group Traceback (most recent call last):
+
+
+TypeError: tuple indices must be integers or slices, not str
+2026-03-31 17:25:07.361 | INFO     | backend.api:lifespan:92 - 🛑 Server shutting down
+2026-03-31 17:26:40.012 | INFO     | agent.memory:init_db:73 - Database schema initialised
+2026-03-31 17:26:41.733 | INFO     | core.auth:init_auth_db:62 - Auth schema initialised
+2026-03-31 17:26:42.004 | INFO     | backend.api:lifespan:88 - ✅ Database initialised
+2026-03-31 17:26:42.005 | INFO     | backend.api:lifespan:89 - ✅ Gemini client ready
+2026-03-31 17:27:21.181 | INFO     | middleware.timing:dispatch:36 - GET /api/sessions status=200 ip=127.0.0.1 duration=1.878s
+2026-03-31 17:27:23.004 | INFO     | middleware.timing:dispatch:36 - GET /api/sessions status=200 ip=127.0.0.1 duration=1.817s
+2026-03-31 17:27:30.399 | INFO     | middleware.timing:dispatch:36 - GET /api/sessions/03bc3062-887e-44d5-9dc8-ff16978fa896/history status=200 ip=127.0.0.1 duration=3.565s
+2026-03-31 17:27:43.621 | INFO     | middleware.timing:dispatch:36 - GET /api/sessions/b360855b-9d99-47b4-8473-6f2a0825c1c1/history status=200 ip=127.0.0.1 duration=3.540s
+2026-03-31 17:28:13.251 | INFO     | middleware.timing:dispatch:36 - GET /api/sessions/f83f6761-aa2b-4386-b432-e7214bfb6a3c/history status=200 ip=127.0.0.1 duration=4.525s
+2026-03-31 17:28:13.292 | INFO     | middleware.timing:dispatch:36 - GET /api/sessions status=200 ip=127.0.0.1 duration=1.725s
+2026-03-31 17:28:15.067 | INFO     | middleware.timing:dispatch:36 - GET /api/sessions status=200 ip=127.0.0.1 duration=1.771s
+2026-03-31 17:28:21.038 | INFO     | middleware.timing:dispatch:36 - GET /api/sessions/f83f6761-aa2b-4386-b432-e7214bfb6a3c/history status=200 ip=127.0.0.1 duration=3.466s
+2026-03-31 17:28:31.474 | INFO     | middleware.timing:dispatch:36 - GET /api/sessions/861430f9-21aa-4283-8c15-b9606af59171/history status=200 ip=127.0.0.1 duration=3.827s
+2026-03-31 17:28:37.191 | INFO     | middleware.timing:dispatch:36 - GET /api/sessions/64c1127f-498a-4bff-9d4f-502ae39cc492/history status=200 ip=127.0.0.1 duration=3.470s
+2026-03-31 17:28:44.428 | INFO     | agent.memory:delete_session:131 - Session soft-deleted: 64c1127f-498a-4bff-9d4f-502ae39cc492
+2026-03-31 17:28:44.430 | INFO     | middleware.timing:dispatch:36 - DELETE /api/sessions/64c1127f-498a-4bff-9d4f-502ae39cc492 status=204 ip=127.0.0.1 duration=1.737s
+2026-03-31 17:28:49.998 | INFO     | agent.memory:delete_session:131 - Session soft-deleted: 03bc3062-887e-44d5-9dc8-ff16978fa896
+2026-03-31 17:28:50.002 | INFO     | middleware.timing:dispatch:36 - DELETE /api/sessions/03bc3062-887e-44d5-9dc8-ff16978fa896 status=204 ip=127.0.0.1 duration=1.858s
+2026-03-31 17:28:53.313 | INFO     | agent.memory:delete_session:131 - Session soft-deleted: 861430f9-21aa-4283-8c15-b9606af59171
+2026-03-31 17:28:53.316 | INFO     | middleware.timing:dispatch:36 - DELETE /api/sessions/861430f9-21aa-4283-8c15-b9606af59171 status=204 ip=127.0.0.1 duration=1.785s
+2026-03-31 17:28:56.097 | INFO     | agent.memory:delete_session:131 - Session soft-deleted: b360855b-9d99-47b4-8473-6f2a0825c1c1
+2026-03-31 17:28:56.100 | INFO     | middleware.timing:dispatch:36 - DELETE /api/sessions/b360855b-9d99-47b4-8473-6f2a0825c1c1 status=204 ip=127.0.0.1 duration=1.744s
+2026-03-31 17:28:58.684 | INFO     | agent.memory:delete_session:131 - Session soft-deleted: f83f6761-aa2b-4386-b432-e7214bfb6a3c
+2026-03-31 17:28:58.688 | INFO     | middleware.timing:dispatch:36 - DELETE /api/sessions/f83f6761-aa2b-4386-b432-e7214bfb6a3c status=204 ip=127.0.0.1 duration=1.740s
+2026-03-31 17:29:00.566 | INFO     | middleware.timing:dispatch:36 - GET /api/sessions status=200 ip=127.0.0.1 duration=1.812s
+2026-03-31 17:29:02.353 | INFO     | middleware.timing:dispatch:36 - GET /api/sessions status=200 ip=127.0.0.1 duration=1.784s
+2026-03-31 17:29:06.983 | INFO     | agent.memory:create_session:87 - Session created: e4535567-f441-4163-a225-531b6638c88a
+2026-03-31 17:29:06.988 | INFO     | middleware.timing:dispatch:36 - POST /api/sessions status=201 ip=127.0.0.1 duration=1.758s
+2026-03-31 17:29:08.711 | INFO     | middleware.timing:dispatch:36 - GET /api/sessions status=200 ip=127.0.0.1 duration=1.716s
+2026-03-31 17:29:08.736 | INFO     | agent.loop:run_single_turn:170 - [TURN START] session=e4535567-f441-4163-a225-531b6638c88a message_len=32
+2026-03-31 17:29:12.443 | INFO     | middleware.timing:dispatch:36 - GET /api/sessions/e4535567-f441-4163-a225-531b6638c88a/history status=404 ip=127.0.0.1 duration=3.706s
+2026-03-31 17:29:16.981 | WARNING  | core.cache:_get_redis:65 - Redis unavailable (Timeout connecting to server), using in-memory fallback
+2026-03-31 17:29:26.728 | DEBUG    | core.cache:_memory_set:183 - [MEM CACHE SET]
+2026-03-31 17:29:30.270 | INFO     | agent.loop:run_single_turn:257 - [TURN END] session=e4535567-f441-4163-a225-531b6638c88a tools=[] loops=0 failures=[] duration=21.53s
+2026-03-31 17:29:30.275 | INFO     | middleware.timing:dispatch:36 - POST /api/chat status=200 ip=127.0.0.1 duration=21.553s
+2026-03-31 17:29:32.019 | INFO     | middleware.timing:dispatch:36 - GET /api/sessions status=200 ip=127.0.0.1 duration=1.734s
+2026-03-31 17:29:50.880 | INFO     | agent.loop:run_single_turn:170 - [TURN START] session=e4535567-f441-4163-a225-531b6638c88a message_len=11
+2026-03-31 17:29:58.655 | INFO     | agent.loop:run_single_turn:220 - [TOOL CALL] get_coordinates args={'location': 'Bali'} session=e4535567-f441-4163-a225-531b6638c88a
+2026-03-31 17:29:59.305 | INFO     | agent.loop:run_single_turn:230 - [TOOL OK] get_coordinates elapsed=0.65s
+2026-03-31 17:30:03.461 | INFO     | agent.loop:run_single_turn:220 - [TOOL CALL] get_nearby_places args={'tag_filter': 'beach', 'lon': 115.1919203, 'lat': -8.2271303} session=e4535567-f441-4163-a225-531b6638c88a
+2026-03-31 17:30:04.321 | INFO     | agent.loop:run_single_turn:230 - [TOOL OK] get_nearby_places elapsed=0.86s
+2026-03-31 17:30:08.406 | DEBUG    | core.cache:_memory_set:183 - [MEM CACHE SET]
+2026-03-31 17:30:11.817 | INFO     | agent.loop:run_single_turn:257 - [TURN END] session=e4535567-f441-4163-a225-531b6638c88a tools=['get_coordinates', 'get_nearby_places'] loops=2 failures=[] duration=20.94s
+2026-03-31 17:30:11.818 | INFO     | middleware.timing:dispatch:36 - POST /api/chat status=200 ip=127.0.0.1 duration=20.943s
+2026-03-31 17:30:13.704 | INFO     | middleware.timing:dispatch:36 - GET /api/sessions status=200 ip=127.0.0.1 duration=1.869s
+2026-03-31 17:30:27.109 | INFO     | middleware.timing:dispatch:36 - PATCH /api/sessions/e4535567-f441-4163-a225-531b6638c88a/rename status=204 ip=127.0.0.1 duration=2.171s

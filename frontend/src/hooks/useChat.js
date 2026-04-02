@@ -1,168 +1,73 @@
-/**
- * hooks/useChat.js
- *
- * Owns ALL chat state and logic.
- * The UI components just call the functions this hook exposes.
- */
-
-import { useState, useRef, useCallback, useEffect } from 'react'
-import { createSession, sendMessage, fetchHistory, fetchSessions } from '../api/client'
-
-const RATE_LIMIT_MS = 5000
+import { useState, useCallback, useRef } from "react";
+import * as api from "../lib/api";
 
 export function useChat() {
-  const [messages, setMessages]       = useState([])
-  const [sessions, setSessions]       = useState([])   // list of past sessions for sidebar
-  const [loading, setLoading]         = useState(false)
-  const [error, setError]             = useState(null)
-  const [rateLimited, setRateLimited] = useState(false)
-  const [countdown, setCountdown]     = useState(0)
+  const [messages, setMessages] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [rateLimitSeconds, setRateLimitSeconds] = useState(0);
+  const timerRef = useRef(null);
 
-  const sessionIdRef   = useRef(null)
-  const lastSentRef    = useRef(0)
-  const countdownTimer = useRef(null)
-
-  // ── Load all sessions on mount so sidebar is populated ───────────────────
-  useEffect(() => {
-    loadAllSessions()
-  }, [])
-
-  async function loadAllSessions() {
-    try {
-      const data = await fetchSessions()
-      setSessions(data.sessions)
-    } catch (e) {
-      console.warn('Could not load sessions:', e.message)
-    }
+  function startRateTimer(seconds) {
+    setRateLimitSeconds(seconds);
+    clearInterval(timerRef.current);
+    timerRef.current = setInterval(() => {
+      setRateLimitSeconds((s) => {
+        if (s <= 1) { clearInterval(timerRef.current); return 0; }
+        return s - 1;
+      });
+    }, 1000);
   }
 
-  // ── helpers ────────────────────────────────────────────────────────────────
-
-  function addMessage(role, text, meta = {}) {
-    setMessages(prev => [
-      ...prev,
-      { id: Date.now() + Math.random(), role, text, tools_used: [], cached: false, ...meta }
-    ])
-  }
-
-  function startCountdown() {
-    setRateLimited(true)
-    clearInterval(countdownTimer.current)
-    countdownTimer.current = setInterval(() => {
-      const remaining = Math.ceil((lastSentRef.current + RATE_LIMIT_MS - Date.now()) / 1000)
-      if (remaining <= 0) {
-        setRateLimited(false)
-        setCountdown(0)
-        clearInterval(countdownTimer.current)
-      } else {
-        setCountdown(remaining)
-      }
-    }, 200)
-  }
-
-  // ── public API ─────────────────────────────────────────────────────────────
-
-  const newSession = useCallback(async () => {
-    setMessages([])
-    setError(null)
-    setRateLimited(false)
-    setCountdown(0)
-    lastSentRef.current = 0
-
+  const loadHistory = useCallback(async (sessionId) => {
     try {
-      const data = await createSession()
-      sessionIdRef.current = data.session_id
-      await loadAllSessions()
+      const data = await api.getHistory(sessionId);
+      setMessages(data.messages || []);
+      setError(null);
     } catch (e) {
-      setError('Could not start a new session. Is the backend running?')
+      setError(e.message);
     }
-  }, [])
+  }, []);
 
-  /**
-   * Load an existing session — fetch history from backend and display it.
-   * Called when user clicks a session in the sidebar.
-   */
-  const loadSession = useCallback(async (sessionId) => {
-    setMessages([])
-    setError(null)
-    setLoading(true)
-    sessionIdRef.current = sessionId
+  const send = useCallback(async (sessionId, text) => {
+    if (!text.trim() || loading) return;
+
+    const userMsg = { role: "user", content: text };
+    setMessages((prev) => [...prev, userMsg]);
+    setLoading(true);
+    setError(null);
 
     try {
-      const data = await fetchHistory(sessionId)
-
-      // Map each DB row { role, content } → shape Message component expects
-      const loaded = data.messages.map((m, i) => ({
-        id: i,
-        role: m.role,       // "user" | "assistant"
-        text: m.content,
-        tools_used: [],
-        cached: false,
-      }))
-
-      setMessages(loaded)
-    } catch (e) {
-      setError(e.message)
-    } finally {
-      setLoading(false)
-    }
-  }, [])
-
-  const send = useCallback(async (text) => {
-    if (!text.trim() || loading) return
-
-    const now = Date.now()
-    if (now - lastSentRef.current < RATE_LIMIT_MS) {
-      startCountdown()
-      return
-    }
-    lastSentRef.current = now
-    setRateLimited(false)
-    setError(null)
-
-    if (!sessionIdRef.current) {
-      try {
-        const data = await createSession()
-        sessionIdRef.current = data.session_id
-        await loadAllSessions()
-      } catch (e) {
-        setError('Could not connect to the backend.')
-        return
-      }
-    }
-
-    addMessage('user', text)
-    setLoading(true)
-
-    try {
-      const data = await sendMessage(sessionIdRef.current, text)
-      addMessage('assistant', data.text, {
+      const data = await api.sendMessage(sessionId, text);
+      const assistantMsg = {
+        role: "assistant",
+        content: data.text,
         tools_used: data.tools_used,
         cached: data.cached,
-      })
+      };
+      setMessages((prev) => [...prev, assistantMsg]);
     } catch (e) {
       if (e.status === 429) {
-        const wait = e.detail?.retry_after_seconds ?? 5
-        setCountdown(wait)
-        startCountdown()
+        const secs = e.detail?.retry_after_seconds || 5;
+        startRateTimer(secs);
+        setMessages((prev) => prev.slice(0, -1)); // remove optimistic user msg
+        setError(`Please wait ${secs}s before sending again.`);
       } else {
-        setError(e.message ?? 'Something went wrong.')
+        setMessages((prev) => [
+          ...prev,
+          { role: "assistant", content: "Something went wrong. Please try again.", isError: true },
+        ]);
+        setError(e.message);
       }
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }, [loading])
+  }, [loading]);
 
-  return {
-    messages,
-    sessions,
-    loading,
-    error,
-    rateLimited,
-    countdown,
-    sessionId: sessionIdRef.current,
-    newSession,
-    loadSession,
-    send,
+  function clearMessages() {
+    setMessages([]);
+    setError(null);
   }
+
+  return { messages, loading, error, rateLimitSeconds, send, loadHistory, clearMessages };
 }
