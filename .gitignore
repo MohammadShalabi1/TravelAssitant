@@ -45,6 +45,7 @@ students.xlsx
 # OS
 .DS_Store
 Thumbs.db
-Dockerfile
+
+# Local container orchestration
 compose.yaml
 docker-compose.yml

@@ -1,0 +1,8 @@
+# Development and verification dependencies.
+# Install with: python -m pip install -r requirements-dev.txt
+
+-r requirements.txt
+
+httpx==0.28.1
+pip-audit==2.7.3
+ruff==0.12.9

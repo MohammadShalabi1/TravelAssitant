@@ -26,7 +26,16 @@ from backend.core.cache import (
     set_tool_cache,
 )
 from backend.core.logger import get_logger
-from backend.core.metrics import record_cache
+from backend.core.metrics import record_blocked_tool_call, record_cache, record_tool_call
+from backend.security.prompt_guard import sanitize_model_text
+from backend.security.tool_gateway import (
+    ToolExecutionContext,
+    ToolPolicyError,
+    authorize_and_execute_tool,
+    sanitize_tool_error,
+    validate_tool_arguments,
+    wrap_untrusted_tool_data,
+)
 
 log = get_logger(__name__)
 
@@ -78,9 +87,13 @@ GEMINI_TOOLS = [
                     properties={
                         "lat": types.Schema(type=types.Type.NUMBER),
                         "lon": types.Schema(type=types.Type.NUMBER),
-                        "tag_filter": types.Schema(type=types.Type.STRING),
+                        "category": types.Schema(
+                            type=types.Type.STRING,
+                            enum=["restaurant", "cafe", "museum", "hotel", "attraction"],
+                        ),
+                        "radius": types.Schema(type=types.Type.INTEGER),
                     },
-                    required=["lat", "lon"],
+                    required=["lat", "lon", "category"],
                 ),
             ),
         ]
@@ -134,38 +147,54 @@ def _format_tool_result(result: dict | str) -> str:
     return "; ".join(parts)
 
 
-def _call_tool_with_retry(name: str, args: dict) -> tuple[str, bool]:
-    fn = TOOL_FUNCTIONS.get(name)
-    if fn is None:
-        log.error(f"Unknown tool requested: {name}")
-        return f"Tool '{name}' is not available.", False
+def _call_tool_with_retry(
+    name: str,
+    args: dict,
+    context: ToolExecutionContext,
+) -> tuple[str, bool, bool]:
+    try:
+        validated_args = validate_tool_arguments(name, args)
+    except ToolPolicyError as exc:
+        record_blocked_tool_call(name, exc.reason)
+        log.warning(f"[TOOL BLOCKED] tool={name} reason={exc.reason} session={context.session_id}")
+        return sanitize_tool_error(exc), False, True
 
-    cached_result = get_tool_cache(name, args)
+    cached_result = get_tool_cache(name, validated_args)
     if cached_result:
         record_cache(hit=True)
         log.info(f"[TOOL CACHE HIT] tool={name}")
-        return cached_result, True
+        return wrap_untrusted_tool_data(name, cached_result), True, False
 
     record_cache(hit=False)
     delay = TOOL_RETRY_BACKOFF
     for attempt in range(1, TOOL_RETRY_ATTEMPTS + 1):
         try:
-            result = fn(**args)
+            result = authorize_and_execute_tool(name, validated_args, context, TOOL_FUNCTIONS)
             formatted = _format_tool_result(result)
             if "error" not in formatted.lower():
-                set_tool_cache(name, args, formatted)
-            return formatted, True
+                set_tool_cache(name, validated_args, formatted)
+            return wrap_untrusted_tool_data(name, formatted), True, False
+        except ToolPolicyError as exc:
+            record_blocked_tool_call(name, exc.reason)
+            log.warning(f"[TOOL BLOCKED] tool={name} reason={exc.reason} session={context.session_id}")
+            return sanitize_tool_error(exc), False, True
         except Exception as exc:
-            log.warning(f"Tool '{name}' attempt {attempt} failed: {exc}")
+            log.warning(f"Tool '{name}' attempt {attempt} failed")
             if attempt < TOOL_RETRY_ATTEMPTS:
                 time.sleep(delay)
                 delay *= 2
 
     log.error(f"Tool '{name}' failed after {TOOL_RETRY_ATTEMPTS} attempts")
-    return f"The '{name}' tool is temporarily unavailable. Please try again later.", False
+    return sanitize_tool_error(), False, False
 
 
-def run_single_turn(session_id: str, user_id: str, user_message: str, client) -> dict:
+def run_single_turn(
+    session_id: str,
+    user_id: str,
+    user_message: str,
+    client,
+    security_restricted: bool = False,
+) -> dict:
     turn_start = time.time()
     log.info(f"[TURN START] session={session_id} message_len={len(user_message)}")
 
@@ -219,6 +248,7 @@ def run_single_turn(session_id: str, user_id: str, user_message: str, client) ->
 
     tools_used: list[str] = []
     tool_failures: list[str] = []
+    total_tool_calls = 0
     loop_count = 0
 
     while response.function_calls:
@@ -230,17 +260,27 @@ def run_single_turn(session_id: str, user_id: str, user_message: str, client) ->
         tool_texts: list[str] = []
         for call in response.function_calls:
             tools_used.append(call.name)
-            log.info(f"[TOOL CALL] {call.name} args={dict(call.args)} session={session_id}")
+            total_tool_calls += 1
+            log.info(f"[TOOL CALL] {call.name} session={session_id}")
 
             t0 = time.time()
-            result_text, success = _call_tool_with_retry(call.name, dict(call.args))
+            context = ToolExecutionContext(
+                session_id=session_id,
+                user_id=user_id,
+                restricted=security_restricted,
+                tool_calls_used=total_tool_calls - 1,
+            )
+            result_text, success, blocked = _call_tool_with_retry(call.name, dict(call.args), context)
             elapsed = time.time() - t0
 
             if success:
+                record_tool_call(call.name, success=True)
                 log.info(f"[TOOL OK] {call.name} elapsed={elapsed:.2f}s")
             else:
+                record_tool_call(call.name, success=False)
                 tool_failures.append(call.name)
-                log.warning(f"[TOOL FAIL] {call.name} session={session_id} elapsed={elapsed:.2f}s")
+                status = "blocked" if blocked else "failed"
+                log.warning(f"[TOOL {status.upper()}] {call.name} session={session_id} elapsed={elapsed:.2f}s")
 
             tool_texts.append(result_text)
 
@@ -250,7 +290,7 @@ def run_single_turn(session_id: str, user_id: str, user_message: str, client) ->
             f"Here are the tool results:\n{tool_summary}\n\nUse this information to answer the user."
         )
 
-    final_text = response.text
+    final_text = sanitize_model_text(response.text)
     if tool_failures and not final_text.strip():
         final_text = (
             "I'm sorry, I wasn't able to retrieve the requested information right now "

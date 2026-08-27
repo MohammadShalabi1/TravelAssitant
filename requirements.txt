@@ -1,0 +1,20 @@
+# Runtime dependencies for the FastAPI backend.
+# Supported Python version: 3.11
+#
+# Keep this file limited to packages required to boot and serve the API.
+
+bcrypt==4.3.0
+email-validator==2.3.0
+fastapi==0.116.1
+google-genai==1.63.0
+gunicorn==23.0.0
+loguru==0.7.3
+numpy==2.2.6
+psycopg2-binary==2.9.11
+pydantic==2.11.7
+python-dotenv==1.1.1
+python-jose==3.5.0
+redis==7.1.1
+requests==2.32.5
+sentence-transformers==5.1.0
+uvicorn[standard]==0.35.0

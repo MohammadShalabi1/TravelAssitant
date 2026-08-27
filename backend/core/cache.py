@@ -21,11 +21,10 @@ import os
 import time
 from dataclasses import asdict, dataclass
 from enum import Enum
-from typing import Optional
+from typing import Any, Optional
 
 import numpy as np
 from dotenv import load_dotenv
-from sentence_transformers import SentenceTransformer
 
 from backend.core.logger import get_logger
 
@@ -43,7 +42,7 @@ TOOL_RESULT_TTLS = {
     "get_nearby_places": 86_400,
 }
 
-_model: Optional[SentenceTransformer] = None
+_model: Optional[Any] = None
 _redis = None
 _use_memory_fallback = False
 _MEMORY_CACHE: list[dict] = []
@@ -280,9 +279,11 @@ def set_cache(
     log.debug(f"[CACHE SET] kind={identity.cache_kind} ttl={ttl}s key={key[-8:]}")
 
 
-def _get_model() -> SentenceTransformer:
+def _get_model() -> Any:
     global _model
     if _model is None:
+        from sentence_transformers import SentenceTransformer
+
         _model = SentenceTransformer("all-MiniLM-L6-v2")
     return _model
 

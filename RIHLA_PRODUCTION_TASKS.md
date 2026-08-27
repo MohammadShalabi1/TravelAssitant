@@ -95,7 +95,7 @@ The current semantic cache is based mainly on user text similarity. A personaliz
 ## 1.3 P0 — Remove Development Artifacts from the Repository
 **Level: J+**
 
-- [ ] Remove `frontend/node_modules` from Git history/current tracking.
+- [x] Remove `frontend/node_modules` from Git history/current tracking.
 - [x] Add to `.gitignore`:
   - [x] `node_modules/`
   - [x] `dist/`
@@ -106,7 +106,7 @@ The current semantic cache is based mainly on user text similarity. A personaliz
   - [x] local DB/artifact files
   - [x] IDE-specific files if not intentionally shared
 - [x] Remove or move unrelated `excelagent.py` into another repository/examples folder if it is not part of Rihla.
-- [ ] Confirm no API keys, tokens, credentials, generated logs, or secrets exist in Git history.
+- [x] Confirm no API keys, tokens, credentials, generated logs, or secrets exist in Git history.
 - [x] Add secret scanning to CI.
 
 ---
@@ -114,12 +114,12 @@ The current semantic cache is based mainly on user text similarity. A personaliz
 ## 1.4 P0 — Create Reproducible Backend Dependency Management
 **Level: J+**
 
-- [ ] Add `pyproject.toml` or a pinned `requirements.txt`.
-- [ ] Pin runtime dependencies to known-compatible versions.
-- [ ] Separate development dependencies from runtime dependencies.
-- [ ] Document supported Python version.
-- [ ] Add dependency vulnerability scanning (`pip-audit` or equivalent).
-- [ ] Verify a clean machine/container can install and boot the API without undeclared packages.
+- [x] Add `pyproject.toml` or a pinned `requirements.txt`.
+- [x] Pin runtime dependencies to known-compatible versions.
+- [x] Separate development dependencies from runtime dependencies.
+- [x] Document supported Python version.
+- [x] Add dependency vulnerability scanning (`pip-audit` or equivalent).
+- [x] Verify a clean machine/container can install and boot the API without undeclared packages.
 
 ---
 
@@ -137,79 +137,79 @@ Implement this as a visible feature of the project, not only as a longer system 
 `User Input → Input Guard → Agent → Tool Policy Gateway → Tool → Untrusted Tool Data Wrapper → Agent → Output Guard → Response`
 
 ## A. Input Guard
-- [ ] Create `backend/security/prompt_guard.py`.
-- [ ] Define a `PromptRiskResult` model:
+- [x] Create `backend/security/prompt_guard.py`.
+- [x] Define a `PromptRiskResult` model:
   - `risk_score`
   - `risk_level`
   - `signals`
   - `action`
-- [ ] Detect common suspicious instruction patterns such as:
+- [x] Detect common suspicious instruction patterns such as:
   - attempts to override system/developer instructions
   - requests to reveal hidden prompts or secrets
   - requests to disable safety/tool policies
   - encoded or obfuscated override attempts
-- [ ] Start with deterministic heuristics and a score.
-- [ ] Optionally add a lightweight classifier later, but do not make an LLM classifier the only security control.
-- [ ] Define clear actions:
+- [x] Start with deterministic heuristics and a score.
+- [x] Optionally add a lightweight classifier later, but do not make an LLM classifier the only security control.
+- [x] Define clear actions:
   - `allow`
   - `allow_with_restrictions`
   - `block`
-- [ ] Log only security metadata, not raw sensitive prompts.
+- [x] Log only security metadata, not raw sensitive prompts.
 
 ## B. Tool Policy Gateway
-- [ ] Route every agent-requested tool call through one function such as:
+- [x] Route every agent-requested tool call through one function such as:
   `authorize_and_execute_tool(tool_name, args, context)`.
-- [ ] Keep an explicit tool allowlist.
-- [ ] Validate all arguments with Pydantic before execution.
-- [ ] Add strict bounds:
-  - [ ] latitude `[-90, 90]`
-  - [ ] longitude `[-180, 180]`
-  - [ ] radius with a safe maximum
-  - [ ] location string maximum length
-  - [ ] allowed place categories/tags
-- [ ] Do not allow the model to choose arbitrary URLs, hosts, files, commands, or Python code.
-- [ ] Treat tool results as **untrusted data**, not as new instructions.
-- [ ] Escape/structure external text before returning it to the model.
-- [ ] Add a maximum number of tool calls and per-tool timeout budget.
-- [ ] Add per-turn total tool budget.
+- [x] Keep an explicit tool allowlist.
+- [x] Validate all arguments with Pydantic before execution.
+- [x] Add strict bounds:
+  - [x] latitude `[-90, 90]`
+  - [x] longitude `[-180, 180]`
+  - [x] radius with a safe maximum
+  - [x] location string maximum length
+  - [x] allowed place categories/tags
+- [x] Do not allow the model to choose arbitrary URLs, hosts, files, commands, or Python code.
+- [x] Treat tool results as **untrusted data**, not as new instructions.
+- [x] Escape/structure external text before returning it to the model.
+- [x] Add a maximum number of tool calls and per-tool timeout budget.
+- [x] Add per-turn total tool budget.
 
 ## C. Protect Against Tool-Argument Injection
 The Overpass query currently uses model-controlled `tag_filter` to build query text.
 
-- [ ] Replace free-form `tag_filter` with an enum/allowlist of supported categories.
-- [ ] Map user concepts such as `restaurant`, `cafe`, `museum`, `hotel`, `attraction` to server-owned query fragments.
-- [ ] Never concatenate arbitrary model-provided query syntax into Overpass QL.
-- [ ] Add tests containing quotes, brackets, query operators, and malicious-looking tag strings.
+- [x] Replace free-form `tag_filter` with an enum/allowlist of supported categories.
+- [x] Map user concepts such as `restaurant`, `cafe`, `museum`, `hotel`, `attraction` to server-owned query fragments.
+- [x] Never concatenate arbitrary model-provided query syntax into Overpass QL.
+- [x] Add tests containing quotes, brackets, query operators, and malicious-looking tag strings.
 
 ## D. Prompt/Secret Exfiltration Protection
-- [ ] Never include environment variables, JWT secrets, database URLs, or API keys in model context.
-- [ ] Add explicit handling for requests asking for system prompts, credentials, or hidden configuration.
-- [ ] Ensure exceptions sent to the model/client do not include secrets.
-- [ ] Sanitize tool error messages before they enter conversation history.
+- [x] Never include environment variables, JWT secrets, database URLs, or API keys in model context.
+- [x] Add explicit handling for requests asking for system prompts, credentials, or hidden configuration.
+- [x] Ensure exceptions sent to the model/client do not include secrets.
+- [x] Sanitize tool error messages before they enter conversation history.
 
 ## E. Security Evaluation
 Create `tests/security/test_prompt_injection.py`.
 
-- [ ] Build an attack corpus with at least:
-  - [ ] direct instruction override
-  - [ ] system-prompt exfiltration request
-  - [ ] encoded override attempt
-  - [ ] tool-argument injection
-  - [ ] malicious text embedded in a mocked tool result
-  - [ ] benign travel requests that resemble attack keywords
-- [ ] Track:
+- [x] Build an attack corpus with at least:
+  - [x] direct instruction override
+  - [x] system-prompt exfiltration request
+  - [x] encoded override attempt
+  - [x] tool-argument injection
+  - [x] malicious text embedded in a mocked tool result
+  - [x] benign travel requests that resemble attack keywords
+- [x] Track:
   - **Attack Success Rate (ASR)**
   - false-positive rate
   - blocked tool calls
   - guard latency
-- [ ] Add a CI security test that fails if known attack cases succeed.
+- [x] Add a CI security test that fails if known attack cases succeed.
 
 ### Acceptance criteria
-- [ ] The agent cannot execute a non-allowlisted tool.
-- [ ] Malformed/out-of-range tool arguments are rejected before network calls.
-- [ ] Known injection test cases cannot reveal secrets or change system/tool policy.
-- [ ] Benign travel queries continue working.
-- [ ] Security decisions are observable through structured metrics.
+- [x] The agent cannot execute a non-allowlisted tool.
+- [x] Malformed/out-of-range tool arguments are rejected before network calls.
+- [x] Known injection test cases cannot reveal secrets or change system/tool policy.
+- [x] Benign travel queries continue working.
+- [x] Security decisions are observable through structured metrics.
 
 ---
 

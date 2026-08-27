@@ -214,7 +214,7 @@ class SessionOwnershipTests(unittest.TestCase):
             patch.object(
                 api,
                 "run_single_turn",
-                lambda session_id, user_id, message, _client: {
+                lambda session_id, user_id, message, _client, _restricted=False: {
                     "text": f"{user_id}:{session_id}:{message}",
                     "tools_used": [],
                     "cached": False,

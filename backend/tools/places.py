@@ -1,14 +1,19 @@
 import requests
-from backend.tools.schemas import NearbyPlaces, POI, GetNearbyPlacesInput
+from backend.tools.schemas import GetNearbyPlacesInput, NearbyPlaces, POI, PlaceCategory
+
+
+OVERPASS_CATEGORY_FILTERS = {
+    PlaceCategory.RESTAURANT: ("amenity", "restaurant"),
+    PlaceCategory.CAFE: ("amenity", "cafe"),
+    PlaceCategory.MUSEUM: ("tourism", "museum"),
+    PlaceCategory.HOTEL: ("tourism", "hotel"),
+    PlaceCategory.ATTRACTION: ("tourism", "attraction"),
+}
+
 
 def get_nearby_places(**kwargs):
     args = GetNearbyPlacesInput(**kwargs)
-    
-    if "=" in args.tag_filter:
-      key, value = args.tag_filter.split("=")
-    else:
-     key = "amenity"
-     value = args.tag_filter
+    key, value = OVERPASS_CATEGORY_FILTERS[args.category]
 
     query = f"""
      [out:json];
@@ -31,7 +36,7 @@ def get_nearby_places(**kwargs):
             continue
         pois.append(POI(
             name=e["tags"].get("name", "Unknown"),
-            type=e["tags"].get(args.tag_filter, "Unknown")
+            type=e["tags"].get(value, args.category.value)
         ))
 
     return NearbyPlaces(places=pois).model_dump()

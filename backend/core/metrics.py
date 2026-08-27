@@ -28,6 +28,9 @@ _tool_calls:        dict[str, int]   = defaultdict(int)   # tool_name → calls
 _tool_failures:     dict[str, int]   = defaultdict(int)   # tool_name → failures
 _cache_hits:        int = 0
 _cache_misses:      int = 0
+_prompt_guard_decisions: dict[str, int] = defaultdict(int)
+_prompt_guard_latencies: Deque[float] = deque(maxlen=500)
+_blocked_tool_calls: dict[str, int] = defaultdict(int)
 
 # ── Latency sliding window (last 500 requests per endpoint) ──────────────────
 _latencies: dict[str, Deque[float]] = defaultdict(lambda: deque(maxlen=500))
@@ -57,6 +60,17 @@ def record_cache(hit: bool):
             _cache_hits += 1
         else:
             _cache_misses += 1
+
+
+def record_prompt_guard(action: str, risk_level: str, latency_ms: float):
+    with _lock:
+        _prompt_guard_decisions[f"{action}:{risk_level}"] += 1
+        _prompt_guard_latencies.append(latency_ms / 1000)
+
+
+def record_blocked_tool_call(tool_name: str, reason: str):
+    with _lock:
+        _blocked_tool_calls[f"{tool_name}:{reason}"] += 1
 
 
 # ── Snapshot ──────────────────────────────────────────────────────────────────
@@ -105,6 +119,13 @@ def get_metrics() -> dict:
             },
             "endpoints": endpoint_stats,
             "tools":     tool_stats,
+            "security": {
+                "prompt_guard_decisions": dict(_prompt_guard_decisions),
+                "prompt_guard_p95_ms": round(
+                    _percentile(list(_prompt_guard_latencies), 95) * 1000, 1
+                ),
+                "blocked_tool_calls": dict(_blocked_tool_calls),
+            },
         }
 
 
@@ -128,5 +149,15 @@ def prometheus_export() -> str:
     for tool, stats in m["tools"].items():
         lines.append(f'travel_agent_tool_calls_total{{tool="{tool}"}} {stats["calls"]}')
         lines.append(f'travel_agent_tool_failures_total{{tool="{tool}"}} {stats["failures"]}')
+    for decision, count in m["security"]["prompt_guard_decisions"].items():
+        action, risk_level = decision.split(":", 1)
+        lines.append(
+            f'travel_agent_prompt_guard_decisions_total{{action="{action}",risk_level="{risk_level}"}} {count}'
+        )
+    for blocked, count in m["security"]["blocked_tool_calls"].items():
+        tool, reason = blocked.split(":", 1)
+        lines.append(
+            f'travel_agent_blocked_tool_calls_total{{tool="{tool}",reason="{reason}"}} {count}'
+        )
 
     return "\n".join(lines) + "\n"

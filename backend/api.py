@@ -56,7 +56,7 @@ from core.auth import (
     register_user,
 )
 from core.logger import get_logger
-from core.metrics import get_metrics, prometheus_export
+from backend.core.metrics import get_metrics, prometheus_export, record_prompt_guard
 from core.rate_limit import (
     MAX_INPUT_LENGTH,
     check_ip_rate_limit,
@@ -66,6 +66,7 @@ from core.rate_limit import (
     time_remaining,
     validate_input,
 )
+from backend.security.prompt_guard import analyze_prompt, safe_error_message
 from middleware.timing import RequestTimingMiddleware, SecurityHeadersMiddleware
 
 load_dotenv()
@@ -239,6 +240,23 @@ async def chat(
     if not ok:
         raise HTTPException(status_code=422, detail=reason)
 
+    prompt_risk = analyze_prompt(body.message)
+    record_prompt_guard(
+        prompt_risk.action,
+        prompt_risk.risk_level,
+        prompt_risk.latency_ms,
+    )
+    log.info(
+        f"prompt_guard session={body.session_id} user={current_user.user_id} "
+        f"action={prompt_risk.action} level={prompt_risk.risk_level} "
+        f"score={prompt_risk.risk_score} signals={prompt_risk.signals}"
+    )
+    if prompt_risk.action == "block":
+        raise HTTPException(
+            status_code=403,
+            detail="This request looks like an attempt to access hidden instructions or internal configuration.",
+        )
+
     try:
         if get_owned_conversation_id(body.session_id, current_user.user_id) is None:
             _raise_session_not_found()
@@ -256,6 +274,7 @@ async def chat(
             current_user.user_id,
             body.message,
             gemini_client,
+            prompt_risk.action == "allow_with_restrictions",
         )
         return ChatResponse(**result, session_id=body.session_id)
     except psycopg2.Error as e:
@@ -265,8 +284,8 @@ async def chat(
     except HTTPException:
         raise
     except Exception as e:
-        log.exception(f"Chat error session={body.session_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        log.exception(f"Chat error session={body.session_id}")
+        raise HTTPException(status_code=500, detail=safe_error_message())
 
 
 # ── History (protected, paginated) ────────────────────────────────────────────
