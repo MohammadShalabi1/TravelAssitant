@@ -43,23 +43,23 @@ The roadmap below focuses on the gaps that still prevent this from being safely 
 
 The API authenticates the caller, but operations that receive `session_id` must also prove that the session belongs to `current_user.user_id`.
 
-- [ ] Add a repository function such as `get_owned_conversation(session_id, user_id)`.
-- [ ] Make ownership validation part of every session-scoped query, preferably directly in SQL:
+- [x] Add a repository function such as `get_owned_conversation(session_id, user_id)`.
+- [x] Make ownership validation part of every session-scoped query, preferably directly in SQL:
   - `WHERE session_id = %s AND user_id = %s AND deleted_at IS NULL`
-- [ ] Enforce ownership in:
-  - [ ] `POST /api/chat`
-  - [ ] `GET /api/sessions/{session_id}/history`
-  - [ ] `PATCH /api/sessions/{session_id}/rename`
-  - [ ] `DELETE /api/sessions/{session_id}`
-  - [ ] `GET /api/sessions/{session_id}/export`
-- [ ] Return `404` for inaccessible sessions instead of revealing whether another user's session exists.
-- [ ] Never expose another user's messages through cache, export, history, or agent context.
-- [ ] Add integration tests with **User A** and **User B** proving that User B cannot read, mutate, delete, export, or chat against User A's session.
+- [x] Enforce ownership in:
+  - [x] `POST /api/chat`
+  - [x] `GET /api/sessions/{session_id}/history`
+  - [x] `PATCH /api/sessions/{session_id}/rename`
+  - [x] `DELETE /api/sessions/{session_id}`
+  - [x] `GET /api/sessions/{session_id}/export`
+- [x] Return `404` for inaccessible sessions instead of revealing whether another user's session exists.
+- [x] Never expose another user's messages through cache, export, history, or agent context.
+- [x] Add integration tests with **User A** and **User B** proving that User B cannot read, mutate, delete, export, or chat against User A's session.
 
 ### Acceptance criteria
-- [ ] A valid JWT is not enough to access an arbitrary `session_id`.
-- [ ] Cross-user access tests consistently return `404`/forbidden behavior.
-- [ ] No repository/service function can load private session data without a user ownership scope.
+- [x] A valid JWT is not enough to access an arbitrary `session_id`.
+- [x] Cross-user access tests consistently return `404`/forbidden behavior.
+- [x] No repository/service function can load private session data without a user ownership scope.
 
 ---
 
@@ -69,26 +69,26 @@ The API authenticates the caller, but operations that receive `session_id` must 
 
 The current semantic cache is based mainly on user text similarity. A personalized answer can be unsafe to reuse across users or across conversations with different context.
 
-- [ ] Classify cacheable requests into:
-  - [ ] **Global/stateless:** deterministic public data where reuse is safe.
-  - [ ] **User-scoped:** may depend on user/session preferences.
-  - [ ] **Non-cacheable:** conversation-sensitive or security-sensitive prompts.
-- [ ] Prefer caching **tool results** (weather/geocoding/place lookups) rather than arbitrary final assistant messages.
-- [ ] If final-answer caching remains, include these in the cache identity:
+- [x] Classify cacheable requests into:
+  - [x] **Global/stateless:** deterministic public data where reuse is safe.
+  - [x] **User-scoped:** may depend on user/session preferences.
+  - [x] **Non-cacheable:** conversation-sensitive or security-sensitive prompts.
+- [x] Prefer caching **tool results** (weather/geocoding/place lookups) rather than arbitrary final assistant messages.
+- [x] If final-answer caching remains, include these in the cache identity:
   - normalized query
   - model/version
   - prompt version
   - relevant conversation-context hash
   - user/session scope when personalized
-- [ ] Do not cache authentication failures, rate-limit responses, errors, or blocked security prompts.
-- [ ] Add cache invalidation/versioning when the system prompt or model changes.
-- [ ] Add cache-hit metadata to traces without exposing cached content.
-- [ ] Test two users asking semantically similar prompts with different preferences.
+- [x] Do not cache authentication failures, rate-limit responses, errors, or blocked security prompts.
+- [x] Add cache invalidation/versioning when the system prompt or model changes.
+- [x] Add cache-hit metadata to traces without exposing cached content.
+- [x] Test two users asking semantically similar prompts with different preferences.
 
 ### Acceptance criteria
-- [ ] A cached answer from User A can never leak User A-specific context to User B.
-- [ ] Dynamic travel data respects explicit TTLs.
-- [ ] Cache keys are documented and testable.
+- [x] A cached answer from User A can never leak User A-specific context to User B.
+- [x] Dynamic travel data respects explicit TTLs.
+- [x] Cache keys are documented and testable.
 
 ---
 
@@ -96,18 +96,18 @@ The current semantic cache is based mainly on user text similarity. A personaliz
 **Level: J+**
 
 - [ ] Remove `frontend/node_modules` from Git history/current tracking.
-- [ ] Add to `.gitignore`:
-  - [ ] `node_modules/`
-  - [ ] `dist/`
-  - [ ] `.venv/`
-  - [ ] `venv/`
-  - [ ] `.pytest_cache/`
-  - [ ] `.coverage`
-  - [ ] local DB/artifact files
-  - [ ] IDE-specific files if not intentionally shared
-- [ ] Remove or move unrelated `excelagent.py` into another repository/examples folder if it is not part of Rihla.
+- [x] Add to `.gitignore`:
+  - [x] `node_modules/`
+  - [x] `dist/`
+  - [x] `.venv/`
+  - [x] `venv/`
+  - [x] `.pytest_cache/`
+  - [x] `.coverage`
+  - [x] local DB/artifact files
+  - [x] IDE-specific files if not intentionally shared
+- [x] Remove or move unrelated `excelagent.py` into another repository/examples folder if it is not part of Rihla.
 - [ ] Confirm no API keys, tokens, credentials, generated logs, or secrets exist in Git history.
-- [ ] Add secret scanning to CI.
+- [x] Add secret scanning to CI.
 
 ---
 
