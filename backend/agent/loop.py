@@ -155,7 +155,7 @@ def _call_tool_with_retry(name: str, args: dict) -> tuple[str, bool]:
 
 # ── Main entry point ──────────────────────────────────────────────────────────
 
-def run_single_turn(session_id: str, user_message: str, client) -> dict:
+def run_single_turn(session_id: str, user_id: str, user_message: str, client) -> dict:
     """
     Run one full agentic turn.
 
@@ -173,12 +173,12 @@ def run_single_turn(session_id: str, user_message: str, client) -> dict:
     cache_key = user_message.lower().strip()
     cached_answer = get_cache(cache_key)
     if cached_answer:
-        save_message(session_id, "assistant", cached_answer)
+        save_message(session_id, user_id, "assistant", cached_answer)
         log.info(f"[CACHE HIT] session={session_id} duration={time.time()-turn_start:.2f}s")
         return {"text": cached_answer, "tools_used": [], "cached": True}
 
     # ── 2. Rebuild chat history (last 10 non-tool messages) ───────────────────
-    raw_history = load_history(session_id, limit=10)
+    raw_history = load_history(session_id, user_id, limit=10)
     gemini_history = [
         types.Content(
             role="user" if role == "user" else "model",
@@ -198,7 +198,7 @@ def run_single_turn(session_id: str, user_message: str, client) -> dict:
     )
 
     # ── 3. Send user message ──────────────────────────────────────────────────
-    save_message(session_id, "user", user_message)
+    save_message(session_id, user_id, "user", user_message)
     response = chat.send_message(user_message)
 
     # ── 4. Agentic tool loop (bounded) ────────────────────────────────────────
@@ -232,7 +232,7 @@ def run_single_turn(session_id: str, user_message: str, client) -> dict:
             tool_texts.append(result_text)
 
         tool_summary = "\n".join(tool_texts)
-        save_message(session_id, "tool", tool_summary)
+        save_message(session_id, user_id, "tool", tool_summary)
 
         response = chat.send_message(
             f"Here are the tool results:\n{tool_summary}\n\nUse this information to answer the user."
@@ -251,7 +251,7 @@ def run_single_turn(session_id: str, user_message: str, client) -> dict:
     # ── 6. Cache + persist ────────────────────────────────────────────────────
     ttl = get_ttl(user_message)
     set_cache(cache_key, final_text, ttl)
-    save_message(session_id, "assistant", final_text)
+    save_message(session_id, user_id, "assistant", final_text)
 
     duration = time.time() - turn_start
     log.info(

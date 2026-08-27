@@ -40,6 +40,7 @@ from agent.memory import (
     create_session,
     delete_session,
     get_all_sessions,
+    get_owned_conversation_id,
     init_db,
     load_history,
     rename_session,
@@ -73,6 +74,10 @@ log = get_logger(__name__)
 executor = ThreadPoolExecutor(max_workers=10)
 gemini_client: genai.Client = None   # type: ignore
 _start_time = time.time()
+
+
+def _raise_session_not_found() -> None:
+    raise HTTPException(status_code=404, detail="Session not found")
 
 
 @asynccontextmanager
@@ -190,16 +195,20 @@ def list_sessions(current_user: CurrentUser = Depends(get_current_user)):
 def api_rename(session_id: str, req: RenameRequest,
                current_user: CurrentUser = Depends(get_current_user)):
     try:
-        rename_session(session_id, req.name)
+        renamed = rename_session(session_id, current_user.user_id, req.name)
     except psycopg2.Error as e:
         raise HTTPException(status_code=503, detail=f"Database error: {e}")
+    if not renamed:
+        _raise_session_not_found()
 
 @app.delete("/api/sessions/{session_id}", status_code=204, tags=["sessions"])
 def api_delete(session_id: str, current_user: CurrentUser = Depends(get_current_user)):
     try:
-        delete_session(session_id)
+        deleted = delete_session(session_id, current_user.user_id)
     except psycopg2.Error as e:
         raise HTTPException(status_code=503, detail=f"Database error: {e}")
+    if not deleted:
+        _raise_session_not_found()
 
 
 # ── Chat (protected) ──────────────────────────────────────────────────────────
@@ -221,12 +230,6 @@ async def chat(
             detail={"error": "ip_rate_limited",
                     "requests_remaining": ip_requests_remaining(client_ip)},
         )
-    if not check_rate_limit(body.session_id):
-        raise HTTPException(
-            status_code=429,
-            detail={"error": "session_rate_limited",
-                    "retry_after_seconds": time_remaining(body.session_id)},
-        )
     if check_spam(client_ip, body.message):
         raise HTTPException(
             status_code=429,
@@ -237,15 +240,30 @@ async def chat(
         raise HTTPException(status_code=422, detail=reason)
 
     try:
+        if get_owned_conversation_id(body.session_id, current_user.user_id) is None:
+            _raise_session_not_found()
+        if not check_rate_limit(body.session_id):
+            raise HTTPException(
+                status_code=429,
+                detail={"error": "session_rate_limited",
+                        "retry_after_seconds": time_remaining(body.session_id)},
+            )
         loop = asyncio.get_event_loop()
         result = await loop.run_in_executor(
-            executor, run_single_turn, body.session_id, body.message, gemini_client
+            executor,
+            run_single_turn,
+            body.session_id,
+            current_user.user_id,
+            body.message,
+            gemini_client,
         )
         return ChatResponse(**result, session_id=body.session_id)
     except psycopg2.Error as e:
         raise HTTPException(status_code=503, detail=f"Database error: {e}")
     except TimeoutError:
         raise HTTPException(status_code=504, detail="Gemini request timed out.")
+    except HTTPException:
+        raise
     except Exception as e:
         log.exception(f"Chat error session={body.session_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -267,7 +285,14 @@ def get_history(
     current_user: CurrentUser = Depends(get_current_user),
 ):
     try:
-        rows = load_history(session_id, limit=limit, offset=offset)
+        if get_owned_conversation_id(session_id, current_user.user_id) is None:
+            _raise_session_not_found()
+        rows = load_history(
+            session_id,
+            current_user.user_id,
+            limit=limit,
+            offset=offset,
+        )
 
     except psycopg2.Error as e:
         raise HTTPException(
@@ -310,7 +335,9 @@ def export_session(session_id: str,
                    current_user: CurrentUser = Depends(get_current_user)):
     """Export full conversation as downloadable JSON."""
     try:
-        rows = load_history(session_id, limit=1000)
+        if get_owned_conversation_id(session_id, current_user.user_id) is None:
+            _raise_session_not_found()
+        rows = load_history(session_id, current_user.user_id, limit=1000)
     except psycopg2.Error as e:
         raise HTTPException(status_code=503, detail=f"Database error: {e}")
     messages = [{"role": r, "content": c} for r, c in rows if r != "tool"]

@@ -14,8 +14,6 @@ from __future__ import annotations
 
 import os
 import uuid
-from datetime import datetime, timezone
-from typing import Optional
 
 import psycopg2
 import psycopg2.extras
@@ -78,7 +76,7 @@ def init_db():
 
 # ── Session management ────────────────────────────────────────────────────────
 
-def create_session(user_id: Optional[str] = None) -> str:
+def create_session(user_id: str) -> str:
     session_id = str(uuid.uuid4())
     with _connect() as conn:
         with conn.cursor() as cur:
@@ -91,50 +89,59 @@ def create_session(user_id: Optional[str] = None) -> str:
     return session_id
 
 
-def get_conversation_id(session_id: str) -> Optional[int]:
+def get_owned_conversation_id(session_id: str, user_id: str) -> int | None:
+    """Return the conversation id only when the session belongs to this user."""
     with _connect() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT id FROM conversations WHERE session_id = %s AND deleted_at IS NULL",
-                (session_id,),
+                """
+                SELECT id
+                FROM conversations
+                WHERE session_id = %s
+                  AND user_id = %s
+                  AND deleted_at IS NULL
+                """,
+                (session_id, user_id),
             )
             row = cur.fetchone()
     return row["id"] if row else None
 
 
-def get_all_sessions(user_id: Optional[str] = None) -> list[tuple]:
-    """Return (session_id, created_at) ordered newest first."""
-    with _connect() as conn:
-        with conn.cursor() as cur:
-            if user_id:
-                cur.execute(
-                    """SELECT session_id, created_at FROM conversations
-                       WHERE user_id = %s AND deleted_at IS NULL
-                       ORDER BY created_at DESC""",
-                    (user_id,),
-                )
-            else:
-                cur.execute(
-                    """SELECT session_id, created_at FROM conversations
-                       WHERE deleted_at IS NULL
-                       ORDER BY created_at DESC""",
-                )
-            return cur.fetchall()
-
-
-def delete_session(session_id: str):
-    """Soft-delete a session."""
+def get_all_sessions(user_id: str) -> list[tuple]:
+    """Return this user's sessions ordered newest first."""
     with _connect() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "UPDATE conversations SET deleted_at = NOW() WHERE session_id = %s",
-                (session_id,),
+                """SELECT session_id, created_at FROM conversations
+                   WHERE user_id = %s AND deleted_at IS NULL
+                   ORDER BY created_at DESC""",
+                (user_id,),
             )
+            return cur.fetchall()
+
+
+def delete_session(session_id: str, user_id: str) -> bool:
+    """Soft-delete a session only if it belongs to the user."""
+    with _connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE conversations
+                SET deleted_at = NOW()
+                WHERE session_id = %s
+                  AND user_id = %s
+                  AND deleted_at IS NULL
+                """,
+                (session_id, user_id),
+            )
+            updated = cur.rowcount
         conn.commit()
-    log.info(f"Session soft-deleted: {session_id}")
+    if updated:
+        log.info(f"Session soft-deleted: {session_id}")
+    return updated > 0
 
 
-def rename_session(session_id: str, name: str):
+def rename_session(session_id: str, user_id: str, name: str) -> bool:
     """
     Store a human-readable name for a session.
     Requires an ALTER TABLE to add a `name` column — included in init_db
@@ -155,19 +162,27 @@ def rename_session(session_id: str, name: str):
                 END$$;
             """)
             cur.execute(
-                "UPDATE conversations SET name = %s WHERE session_id = %s",
-                (name, session_id),
+                """
+                UPDATE conversations
+                SET name = %s
+                WHERE session_id = %s
+                  AND user_id = %s
+                  AND deleted_at IS NULL
+                """,
+                (name, session_id, user_id),
             )
+            updated = cur.rowcount
         conn.commit()
+    return updated > 0
 
 
 # ── Message persistence ───────────────────────────────────────────────────────
 
-def save_message(session_id: str, role: str, content: str):
-    conv_id = get_conversation_id(session_id)
+def save_message(session_id: str, user_id: str, role: str, content: str) -> bool:
+    conv_id = get_owned_conversation_id(session_id, user_id)
     if conv_id is None:
         log.error(f"save_message: session not found: {session_id}")
-        return
+        return False
     with _connect() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -175,12 +190,14 @@ def save_message(session_id: str, role: str, content: str):
                 (conv_id, role, content),
             )
         conn.commit()
+    return True
 
 #load the history for a specific session (when clicking on a session in the history bar we need the fetch the messages in that session this what this fct do)
 # limit is the amx messages to return (prevent loading huge nb of messages at once )
 #-> list[tuple] tells you what it returns: a list of tuples like [("user", "hello"), ("assistant", "hi!")]
 def load_history(
     session_id: str,
+    user_id: str,
     limit: int = 50,
     offset: int = 0,
 ) -> list[tuple]:
@@ -188,7 +205,7 @@ def load_history(
     Paginated history.  Returns list of (role, content) tuples, oldest first.
     Default: last 50 messages.
     """
-    conv_id = get_conversation_id(session_id)
+    conv_id = get_owned_conversation_id(session_id, user_id)
     if conv_id is None:
         return []
 
