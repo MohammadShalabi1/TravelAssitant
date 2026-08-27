@@ -21,9 +21,21 @@ os.environ.setdefault("GEMINI_API_KEY", "test-gemini-key")
 os.environ.setdefault("JWT_SECRET", "test-jwt-secret")
 
 cache_stub = types.ModuleType("backend.core.cache")
+cache_stub.CacheAction = types.SimpleNamespace(ALLOW="allow", BYPASS="bypass")
 cache_stub.get_cache = lambda _key: None
 cache_stub.set_cache = lambda _key, _value, _ttl: None
+cache_stub.get_tool_cache = lambda _tool_name, _args: None
+cache_stub.set_tool_cache = lambda _tool_name, _args, _result: None
 cache_stub.get_ttl = lambda _query: 60
+cache_stub.build_cache_identity = lambda *args, **kwargs: types.SimpleNamespace(
+    user_scope="global"
+)
+cache_stub.classify_cache_request = lambda *args, **kwargs: types.SimpleNamespace(
+    action="bypass",
+    kind=types.SimpleNamespace(value="non_cacheable"),
+    reason="test",
+)
+cache_stub.hash_context = lambda _messages: "empty"
 sys.modules.setdefault("backend.core.cache", cache_stub)
 
 class _LoggerStub:
