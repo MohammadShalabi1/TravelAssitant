@@ -21,3 +21,6 @@ logs/
 
 # IDE
 .vscode/
+Dockerfile
+compose.yaml
+docker-compose.yml
