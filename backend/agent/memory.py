@@ -21,7 +21,7 @@ import psycopg2
 import psycopg2.extras
 from psycopg2.extensions import connection as PGConnection
 from dotenv import load_dotenv
-from core.logger import get_logger
+from backend.core.logger import get_logger
 
 log = get_logger(__name__)
 

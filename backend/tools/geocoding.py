@@ -1,5 +1,5 @@
 import requests
-from tools.schemas import Coordinates, GetCoordinatesInput
+from backend.tools.schemas import Coordinates, GetCoordinatesInput
 
 def get_coordinates(**kwargs):
     args = GetCoordinatesInput(**kwargs)

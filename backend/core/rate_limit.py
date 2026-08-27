@@ -13,7 +13,7 @@ import time
 import hashlib
 from collections import defaultdict, deque
 
-from core.logger import get_logger
+from backend.core.logger import get_logger
 
 log = get_logger(__name__)
 

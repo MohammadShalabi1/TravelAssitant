@@ -26,7 +26,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import JWTError, jwt
 from pydantic import BaseModel, EmailStr
 
-from core.logger import get_logger
+from backend.core.logger import get_logger
 
 log = get_logger(__name__)
 

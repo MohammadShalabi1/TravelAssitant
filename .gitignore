@@ -1,7 +1,23 @@
-# Ignore environment variables file
-.env
-
-# Ignore Python cache files
+# Python
+.venv/
+venv/
+backend/.venv/
 __pycache__/
 *.pyc
-logs
+
+# Environment secrets
+.env
+backend/.env
+frontend/.env
+
+# Node
+node_modules/
+frontend/node_modules/
+dist/
+
+# Logs
+logs/
+*.log
+
+# IDE
+.vscode/

@@ -16,19 +16,19 @@ from typing import Any
 
 from google.genai import types
 
-from agent.router import choose_model
-from core.cache import get_cache, set_cache, get_ttl
-from agent.memory import save_message, load_history
-from core.logger import get_logger
+from backend.agent.router import choose_model
+from backend.core.cache import get_cache, set_cache, get_ttl
+from backend.agent.memory import save_message, load_history
+from backend.core.logger import get_logger
 
 log = get_logger(__name__)
 
 # ── Tool registry ─────────────────────────────────────────────────────────────
 # Import lazily so the module loads even if tool deps are missing in tests.
 try:
-    from tools.weather import get_current_weather
-    from tools.geocoding import get_coordinates
-    from tools.places import get_nearby_places
+    from backend.tools.weather import get_current_weather
+    from backend.tools.geocoding import get_coordinates
+    from backend.tools.places import get_nearby_places
 except ImportError:
     get_current_weather = get_coordinates = get_nearby_places = None  # type: ignore
 

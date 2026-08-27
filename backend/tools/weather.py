@@ -1,6 +1,6 @@
 import requests, os
 from dotenv import load_dotenv
-from tools.schemas import Weather, GetWeatherInput
+from backend.tools.schemas import Weather, GetWeatherInput
 
 load_dotenv()
 OPENWEATHER_API_KEY = os.getenv("OPENWEATHER_API_KEY")

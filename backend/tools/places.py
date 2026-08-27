@@ -1,5 +1,5 @@
 import requests
-from tools.schemas import NearbyPlaces, POI, GetNearbyPlacesInput
+from backend.tools.schemas import NearbyPlaces, POI, GetNearbyPlacesInput
 
 def get_nearby_places(**kwargs):
     args = GetNearbyPlacesInput(**kwargs)
