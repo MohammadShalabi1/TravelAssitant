@@ -219,19 +219,19 @@ Create `tests/security/test_prompt_injection.py`.
 **Level: MID**  
 **Terms:** short-lived access token, refresh token rotation, token revocation, HttpOnly cookie, SameSite, CSRF.
 
-- [ ] Stop storing long-lived bearer tokens in `localStorage`.
-- [ ] Preferred design:
+- [x] Stop storing long-lived bearer tokens in `localStorage`.
+- [x] Preferred design:
   - short-lived access token held in memory
   - refresh token in `HttpOnly`, `Secure`, `SameSite` cookie
-- [ ] Add refresh-token rotation.
-- [ ] Store refresh-token hashes/server-side session records so sessions can be revoked.
-- [ ] Add logout/revoke endpoint.
-- [ ] Add password minimum length and reasonable strength rules.
-- [ ] Normalize emails before storage/comparison.
-- [ ] Add login rate limiting.
-- [ ] Add generic auth failures to reduce account enumeration.
-- [ ] If cookies authenticate state-changing requests cross-site, add CSRF protection.
-- [ ] Add expiration/revocation tests.
+- [x] Add refresh-token rotation.
+- [x] Store refresh-token hashes/server-side session records so sessions can be revoked.
+- [x] Add logout/revoke endpoint.
+- [x] Add password minimum length and reasonable strength rules.
+- [x] Normalize emails before storage/comparison.
+- [x] Add login rate limiting.
+- [x] Add generic auth failures to reduce account enumeration.
+- [x] If cookies authenticate state-changing requests cross-site, add CSRF protection.
+- [x] Add expiration/revocation tests.
 
 ---
 

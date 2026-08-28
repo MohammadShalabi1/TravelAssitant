@@ -28,7 +28,7 @@ from typing import Optional
 
 import psycopg2
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, HTTPException, Query, Request
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse
 from google import genai
@@ -53,6 +53,8 @@ from core.auth import (
     get_current_user,
     init_auth_db,
     login_user,
+    logout_user,
+    refresh_user_session,
     register_user,
 )
 from core.logger import get_logger
@@ -104,7 +106,11 @@ app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(RequestTimingMiddleware)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=os.getenv("ALLOWED_ORIGINS", "*").split(","),
+    allow_origins=os.getenv(
+        "ALLOWED_ORIGINS",
+        "http://localhost:5173,http://localhost:3000",
+    ).split(","),
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -163,12 +169,20 @@ class HealthStatus(BaseModel):
 # ── Auth (public) ─────────────────────────────────────────────────────────────
 
 @app.post("/api/auth/register", response_model=AuthResponse, status_code=201, tags=["auth"])
-def api_register(req: RegisterRequest):
-    return register_user(req)
+def api_register(req: RegisterRequest, response: Response):
+    return register_user(req, response)
 
 @app.post("/api/auth/login", response_model=AuthResponse, tags=["auth"])
-def api_login(req: LoginRequest):
-    return login_user(req)
+def api_login(req: LoginRequest, request: Request, response: Response):
+    return login_user(req, request, response)
+
+@app.post("/api/auth/refresh", response_model=AuthResponse, tags=["auth"])
+def api_refresh(request: Request, response: Response):
+    return refresh_user_session(request, response)
+
+@app.post("/api/auth/logout", tags=["auth"])
+def api_logout(request: Request, response: Response):
+    return logout_user(request, response)
 
 
 # ── Sessions (protected) ──────────────────────────────────────────────────────

@@ -1,4 +1,5 @@
-import { createContext, useContext, useState, useEffect } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
+import { logoutRequest, refreshAuth, setAccessToken } from "./api";
 
 const AuthContext = createContext(null);
 
@@ -7,21 +8,32 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const token = localStorage.getItem("token");
-    const email = localStorage.getItem("email");
-    if (token && email) setUser({ token, email });
-    setLoading(false);
+    let cancelled = false;
+    async function restoreSession() {
+      try {
+        const data = await refreshAuth();
+        if (!cancelled && data?.access_token) {
+          setUser({ email: data.email, user_id: data.user_id });
+        }
+      } catch (_err) {
+        setAccessToken(null);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    restoreSession();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   function loginSuccess(data) {
-    localStorage.setItem("token", data.access_token);
-    localStorage.setItem("email", data.email);
-    setUser({ token: data.access_token, email: data.email });
+    setAccessToken(data.access_token);
+    setUser({ email: data.email, user_id: data.user_id });
   }
 
-  function logout() {
-    localStorage.removeItem("token");
-    localStorage.removeItem("email");
+  async function logout() {
+    await logoutRequest();
     setUser(null);
   }
 
