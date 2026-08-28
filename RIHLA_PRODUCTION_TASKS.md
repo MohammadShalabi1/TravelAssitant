@@ -238,13 +238,13 @@ Create `tests/security/test_prompt_injection.py`.
 ## 3.2 P1 — Tighten CORS and Proxy Trust
 **Level: J+ → MID**
 
-- [ ] Remove production fallback `allow_origins="*"`.
-- [ ] Set explicit production frontend origins.
-- [ ] Restrict methods/headers to what the API actually uses.
-- [ ] Do not blindly trust arbitrary `X-Forwarded-For`.
-- [ ] Configure trusted proxy behavior for the deployment platform.
-- [ ] Derive client IP only from a trusted reverse proxy.
-- [ ] Test direct requests that spoof forwarding headers.
+- [x] Remove production fallback `allow_origins="*"`.
+- [x] Set explicit production frontend origins.
+- [x] Restrict methods/headers to what the API actually uses.
+- [x] Do not blindly trust arbitrary `X-Forwarded-For`.
+- [x] Configure trusted proxy behavior for the deployment platform.
+- [x] Derive client IP only from a trusted reverse proxy.
+- [x] Test direct requests that spoof forwarding headers.
 
 ---
 

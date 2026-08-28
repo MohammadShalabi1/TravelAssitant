@@ -12,6 +12,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
 
+from backend.core.client_ip import get_client_ip
 from backend.core.logger import get_logger
 from backend.core.metrics import record_request
 
@@ -23,10 +24,7 @@ class RequestTimingMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next) -> Response:
         start = time.time()
-        client_ip = (
-            request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
-            or (request.client.host if request.client else "unknown")
-        )
+        client_ip = get_client_ip(request)
 
         response: Response = await call_next(request)
 

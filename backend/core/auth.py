@@ -19,6 +19,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
 from pydantic import BaseModel, EmailStr
 
+from backend.core.client_ip import get_client_ip
 from backend.core.logger import get_logger
 
 log = get_logger(__name__)
@@ -162,7 +163,7 @@ def _clear_auth_cookies(response: Response) -> None:
 
 
 def _client_ip(request: Request) -> str:
-    return request.client.host if request.client else "unknown"
+    return get_client_ip(request)
 
 
 def _login_rate_key(email: str, request: Request) -> str:

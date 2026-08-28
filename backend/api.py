@@ -57,6 +57,7 @@ from core.auth import (
     refresh_user_session,
     register_user,
 )
+from backend.core.client_ip import get_client_ip, get_cors_config
 from core.logger import get_logger
 from backend.core.metrics import get_metrics, prometheus_export, record_prompt_guard
 from core.rate_limit import (
@@ -104,15 +105,14 @@ app = FastAPI(title="Travel Agent API", version="2.0.0", lifespan=lifespan)
 
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(RequestTimingMiddleware)
+cors_config = get_cors_config()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=os.getenv(
-        "ALLOWED_ORIGINS",
-        "http://localhost:5173,http://localhost:3000",
-    ).split(","),
+    allow_origins=cors_config.allow_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=cors_config.allow_methods,
+    allow_headers=cors_config.allow_headers,
+    expose_headers=cors_config.expose_headers,
 )
 
 
@@ -234,10 +234,7 @@ async def chat(
     body: ChatRequest,
     current_user: CurrentUser = Depends(get_current_user),
 ):
-    client_ip = (
-        req.headers.get("X-Forwarded-For", "").split(",")[0].strip()
-        or (req.client.host if req.client else "unknown")
-    )
+    client_ip = get_client_ip(req)
 
     if not check_ip_rate_limit(client_ip):
         raise HTTPException(
