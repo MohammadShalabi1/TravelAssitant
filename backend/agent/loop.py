@@ -27,7 +27,13 @@ from backend.core.cache import (
     set_tool_cache,
 )
 from backend.core.logger import get_logger
-from backend.core.metrics import record_blocked_tool_call, record_cache, record_tool_call
+from backend.core.metrics import (
+    record_blocked_tool_call,
+    record_cache,
+    record_model_fallback,
+    record_model_route,
+    record_tool_call,
+)
 from backend.security.prompt_guard import sanitize_model_text
 from backend.security.tool_gateway import (
     ToolExecutionContext,
@@ -140,6 +146,9 @@ class TurnState:
     tool_failures: list[str] = field(default_factory=list)
     total_tool_calls: int = 0
     loop_count: int = 0
+    route_category: str = ""
+    fallback_model: str = ""
+    route_reason: str = ""
 
 
 @dataclass(frozen=True)
@@ -229,7 +238,23 @@ def load_context(state: TurnState) -> list[tuple[str, str]]:
 
 
 def select_model(state: TurnState) -> str:
-    state.model_version = choose_model(state.user_message)
+    route = choose_model(
+        state.user_message,
+        security_restricted=state.security_restricted,
+    )
+    state.route_category = route.category.value
+    state.model_version = route.model
+    state.fallback_model = route.fallback_model
+    state.route_reason = route.reason
+    record_model_route(state.route_category, state.model_version)
+    record_trace(
+        state,
+        "MODEL ROUTE",
+        category=state.route_category,
+        model=state.model_version,
+        fallback=state.fallback_model,
+        reason=state.route_reason,
+    )
     return state.model_version
 
 
@@ -273,17 +298,37 @@ def persist_turn(state: TurnState, role: str, content: str) -> bool:
     return save_message(state.session_id, state.user_id, role, content)
 
 
-def call_model(state: TurnState, client) -> Any:
+def _send_model_message(state: TurnState, client, model: str) -> Any:
     state.chat = client.chats.create(
-        model=state.model_version,
+        model=model,
         config=types.GenerateContentConfig(
             tools=GEMINI_TOOLS,
             system_instruction=SYSTEM_PROMPT,
         ),
         history=_to_gemini_history(state.raw_history),
     )
-    persist_turn(state, "user", state.user_message)
     return state.chat.send_message(state.user_message)
+
+
+def call_model(state: TurnState, client) -> Any:
+    persist_turn(state, "user", state.user_message)
+    try:
+        return _send_model_message(state, client, state.model_version)
+    except Exception:
+        if not state.fallback_model or state.model_version == state.fallback_model:
+            raise
+
+        original_model = state.model_version
+        state.model_version = state.fallback_model
+        record_model_fallback(state.route_category, original_model, state.fallback_model)
+        record_trace(
+            state,
+            "MODEL FALLBACK",
+            category=state.route_category,
+            from_model=original_model,
+            to_model=state.fallback_model,
+        )
+        return _send_model_message(state, client, state.fallback_model)
 
 
 def validate_tool_call(call: Any) -> tuple[str, dict[str, Any]]:

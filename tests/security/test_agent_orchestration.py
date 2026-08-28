@@ -71,9 +71,11 @@ class FakeChats:
     def __init__(self, chat: FakeChat):
         self.chat = chat
         self.created_with = None
+        self.create_calls = []
 
     def create(self, **kwargs):
         self.created_with = kwargs
+        self.create_calls.append(kwargs)
         return self.chat
 
 
@@ -82,13 +84,31 @@ class FakeClient:
         self.chats = FakeChats(chat)
 
 
+class FailingOnceChats(FakeChats):
+    def __init__(self, failing_chat: FakeChat, fallback_chat: FakeChat):
+        super().__init__(failing_chat)
+        self.fallback_chat = fallback_chat
+
+    def create(self, **kwargs):
+        self.created_with = kwargs
+        self.create_calls.append(kwargs)
+        if len(self.create_calls) == 1:
+            return self.chat
+        return self.fallback_chat
+
+
+class FailingOnceClient:
+    def __init__(self, failing_chat: FakeChat, fallback_chat: FakeChat):
+        self.chats = FailingOnceChats(failing_chat, fallback_chat)
+
+
 class AgentOrchestrationTests(unittest.TestCase):
     def setUp(self) -> None:
         self.saved_messages: list[tuple[str, str, str, str]] = []
         self.cache_sets = []
         self.patchers = [
             patch.object(agent_loop, "load_history", lambda _sid, _uid, limit=10: []),
-            patch.object(agent_loop, "choose_model", lambda _message: "test-model"),
+            patch.object(agent_loop, "choose_model", self._model_route),
             patch.object(agent_loop, "classify_cache_request", self._cache_policy),
             patch.object(agent_loop, "build_cache_identity", self._cache_identity),
             patch.object(agent_loop, "hash_context", lambda _history: "context-hash"),
@@ -98,6 +118,12 @@ class AgentOrchestrationTests(unittest.TestCase):
             patch.object(agent_loop, "record_cache", lambda hit: None),
             patch.object(agent_loop, "record_tool_call", lambda _name, success=True: None),
             patch.object(agent_loop, "record_blocked_tool_call", lambda _name, _reason: None),
+            patch.object(agent_loop, "record_model_route", lambda _category, _model: None),
+            patch.object(
+                agent_loop,
+                "record_model_fallback",
+                lambda _category, _from_model, _to_model: None,
+            ),
         ]
         for patcher in self.patchers:
             patcher.start()
@@ -116,6 +142,14 @@ class AgentOrchestrationTests(unittest.TestCase):
 
     def _cache_identity(self, *_args, **_kwargs):
         return SimpleNamespace(user_scope="global")
+
+    def _model_route(self, _message: str, security_restricted: bool = False):
+        return SimpleNamespace(
+            category=SimpleNamespace(value="test_route"),
+            model="test-model",
+            fallback_model="fallback-model",
+            reason="test_reason",
+        )
 
     def _save_message(self, session_id: str, user_id: str, role: str, content: str):
         self.saved_messages.append((session_id, user_id, role, content))
@@ -163,11 +197,88 @@ class AgentOrchestrationTests(unittest.TestCase):
         chat = FakeChat([FakeResponse("Final answer")])
         client = FakeClient(chat)
 
-        with patch.object(agent_loop, "choose_model", lambda _message: "gemini-test-route"):
+        def route(_message: str, security_restricted: bool = False):
+            return SimpleNamespace(
+                category=SimpleNamespace(value="itinerary_planning"),
+                model="gemini-test-route",
+                fallback_model="gemini-fallback-route",
+                reason="itinerary_signal",
+            )
+
+        with patch.object(agent_loop, "choose_model", route):
             agent_loop.run_single_turn(SESSION, USER, "plan rome", client)
 
         self.assertEqual(client.chats.created_with["model"], "gemini-test-route")
         self.assertEqual(len(client.chats.created_with["history"]), 0)
+
+    def test_model_route_metadata_is_recorded(self) -> None:
+        chat = FakeChat([FakeResponse("Final answer")])
+        route_records = []
+
+        def route(_message: str, security_restricted: bool = False):
+            return SimpleNamespace(
+                category=SimpleNamespace(value="tool_heavy_factual"),
+                model="gemini-tool-route",
+                fallback_model="gemini-fallback-route",
+                reason="tool_heavy_signal",
+            )
+
+        with (
+            patch.object(agent_loop, "choose_model", route),
+            patch.object(
+                agent_loop,
+                "record_model_route",
+                lambda category, model: route_records.append((category, model)),
+            ),
+        ):
+            agent_loop.run_single_turn(SESSION, USER, "weather in Paris", FakeClient(chat))
+
+        self.assertEqual(route_records, [("tool_heavy_factual", "gemini-tool-route")])
+
+    def test_model_fallback_retries_once_with_fallback_model(self) -> None:
+        class FailingChat(FakeChat):
+            def send_message(self, message: str) -> FakeResponse:
+                self.messages.append(message)
+                raise RuntimeError("primary model unavailable")
+
+        fallback_records = []
+        failing_chat = FailingChat([])
+        fallback_chat = FakeChat([FakeResponse("Fallback answer")])
+        client = FailingOnceClient(failing_chat, fallback_chat)
+
+        def route(_message: str, security_restricted: bool = False):
+            return SimpleNamespace(
+                category=SimpleNamespace(value="itinerary_planning"),
+                model="primary-model",
+                fallback_model="fallback-model",
+                reason="itinerary_signal",
+            )
+
+        with (
+            patch.object(agent_loop, "choose_model", route),
+            patch.object(
+                agent_loop,
+                "record_model_fallback",
+                lambda category, from_model, to_model: fallback_records.append(
+                    (category, from_model, to_model)
+                ),
+            ),
+        ):
+            result = agent_loop.run_single_turn(SESSION, USER, "plan Rome", client)
+
+        self.assertEqual(result["text"], "Fallback answer")
+        self.assertEqual(
+            [call["model"] for call in client.chats.create_calls],
+            ["primary-model", "fallback-model"],
+        )
+        self.assertEqual(
+            fallback_records,
+            [("itinerary_planning", "primary-model", "fallback-model")],
+        )
+        self.assertEqual(
+            [(role, content) for *_ids, role, content in self.saved_messages],
+            [("user", "plan Rome"), ("assistant", "Fallback answer")],
+        )
 
     def test_tool_calls_are_executed_and_tool_results_are_persisted(self) -> None:
         call = FakeCall("get_coordinates", {"location": "Paris"})

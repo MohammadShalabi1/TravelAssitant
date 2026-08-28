@@ -31,6 +31,9 @@ _cache_misses:      int = 0
 _prompt_guard_decisions: dict[str, int] = defaultdict(int)
 _prompt_guard_latencies: Deque[float] = deque(maxlen=500)
 _blocked_tool_calls: dict[str, int] = defaultdict(int)
+_model_routes: dict[str, int] = defaultdict(int)
+_model_selections: dict[str, int] = defaultdict(int)
+_model_fallbacks: dict[str, int] = defaultdict(int)
 
 # ── Latency sliding window (last 500 requests per endpoint) ──────────────────
 _latencies: dict[str, Deque[float]] = defaultdict(lambda: deque(maxlen=500))
@@ -71,6 +74,17 @@ def record_prompt_guard(action: str, risk_level: str, latency_ms: float):
 def record_blocked_tool_call(tool_name: str, reason: str):
     with _lock:
         _blocked_tool_calls[f"{tool_name}:{reason}"] += 1
+
+
+def record_model_route(category: str, model: str):
+    with _lock:
+        _model_routes[category] += 1
+        _model_selections[model] += 1
+
+
+def record_model_fallback(category: str, from_model: str, to_model: str):
+    with _lock:
+        _model_fallbacks[f"{category}:{from_model}:{to_model}"] += 1
 
 
 # ── Snapshot ──────────────────────────────────────────────────────────────────
@@ -126,6 +140,11 @@ def get_metrics() -> dict:
                 ),
                 "blocked_tool_calls": dict(_blocked_tool_calls),
             },
+            "models": {
+                "routes": dict(_model_routes),
+                "selected": dict(_model_selections),
+                "fallbacks": dict(_model_fallbacks),
+            },
         }
 
 
@@ -158,6 +177,16 @@ def prometheus_export() -> str:
         tool, reason = blocked.split(":", 1)
         lines.append(
             f'travel_agent_blocked_tool_calls_total{{tool="{tool}",reason="{reason}"}} {count}'
+        )
+    for category, count in m["models"]["routes"].items():
+        lines.append(f'travel_agent_model_routes_total{{category="{category}"}} {count}')
+    for model, count in m["models"]["selected"].items():
+        lines.append(f'travel_agent_model_selected_total{{model="{model}"}} {count}')
+    for fallback, count in m["models"]["fallbacks"].items():
+        category, from_model, to_model = fallback.split(":", 2)
+        lines.append(
+            "travel_agent_model_fallbacks_total"
+            f'{{category="{category}",from_model="{from_model}",to_model="{to_model}"}} {count}'
         )
 
     return "\n".join(lines) + "\n"

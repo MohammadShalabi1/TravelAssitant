@@ -286,16 +286,16 @@ Keep the custom loop if desired. The goal is clarity and testability, not adopti
 **Level: MID**  
 The current router always returns one model.
 
-- [ ] Define routing categories:
-  - simple conversation
-  - tool-heavy factual request
-  - itinerary planning/reasoning
-  - safety-sensitive request
-- [ ] Implement deterministic routing first.
-- [ ] Store the selected model in trace metadata.
-- [ ] Add fallback model/provider behavior.
-- [ ] Test routing decisions with a labeled dataset.
-- [ ] Measure cost/latency/quality before adding complexity.
+- [x] Define routing categories:
+  - [x] simple conversation
+  - [x] tool-heavy factual request
+  - [x] itinerary planning/reasoning
+  - [x] safety-sensitive request
+- [x] Implement deterministic routing first.
+- [x] Store the selected model in trace metadata.
+- [x] Add fallback model/provider behavior.
+- [x] Test routing decisions with a labeled dataset.
+- [x] Measure cost/latency/quality before adding complexity.
 
 ---
 
