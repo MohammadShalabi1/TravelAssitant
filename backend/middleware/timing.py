@@ -1,11 +1,12 @@
 """
 FastAPI middleware:
   1. RequestTimingMiddleware  — records latency, logs every request
-  2. SecurityHeadersMiddleware — adds CSP / X-Frame-Options etc.
+  2. SecurityHeadersMiddleware — adds browser security headers.
 """
 
 from __future__ import annotations
 
+import os
 import time
 
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -17,6 +18,27 @@ from backend.core.logger import get_logger
 from backend.core.metrics import record_request
 
 log = get_logger(__name__)
+
+API_CONTENT_SECURITY_POLICY = (
+    "default-src 'none'; "
+    "base-uri 'none'; "
+    "frame-ancestors 'none'; "
+    "form-action 'none'"
+)
+PERMISSIONS_POLICY = (
+    "camera=(), microphone=(), geolocation=(), payment=(), usb=(), "
+    "browsing-topics=()"
+)
+HSTS_HEADER = "max-age=31536000; includeSubDomains"
+
+
+def _is_secure_request(request: Request) -> bool:
+    forwarded_proto = request.headers.get("X-Forwarded-Proto", "").split(",", 1)[0]
+    return (
+        request.url.scheme == "https"
+        or forwarded_proto.strip().lower() == "https"
+        or os.getenv("APP_ENV", "local").strip().lower() in {"prod", "production"}
+    )
 
 
 class RequestTimingMiddleware(BaseHTTPMiddleware):
@@ -48,8 +70,13 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next) -> Response:
         response: Response = await call_next(request)
-        response.headers["X-Content-Type-Options"]  = "nosniff"
-        response.headers["X-Frame-Options"]          = "DENY"
-        response.headers["Referrer-Policy"]          = "strict-origin-when-cross-origin"
-        response.headers["X-XSS-Protection"]         = "1; mode=block"
+        response.headers["Content-Security-Policy"] = API_CONTENT_SECURITY_POLICY
+        response.headers["Permissions-Policy"] = PERMISSIONS_POLICY
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        if _is_secure_request(request):
+            response.headers["Strict-Transport-Security"] = HSTS_HEADER
+        if "X-XSS-Protection" in response.headers:
+            del response.headers["X-XSS-Protection"]
         return response

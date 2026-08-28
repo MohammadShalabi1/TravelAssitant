@@ -251,11 +251,11 @@ Create `tests/security/test_prompt_injection.py`.
 ## 3.3 P1 — Improve Security Headers
 **Level: J+**
 
-- [ ] Add an explicit Content Security Policy appropriate for the frontend.
-- [ ] Add HSTS at the HTTPS edge/reverse proxy.
-- [ ] Add `Permissions-Policy`.
-- [ ] Remove obsolete `X-XSS-Protection` reliance.
-- [ ] Verify headers with automated tests.
+- [x] Add an explicit Content Security Policy appropriate for the frontend.
+- [x] Add HSTS at the HTTPS edge/reverse proxy.
+- [x] Add `Permissions-Policy`.
+- [x] Remove obsolete `X-XSS-Protection` reliance.
+- [x] Verify headers with automated tests.
 
 ---
 
