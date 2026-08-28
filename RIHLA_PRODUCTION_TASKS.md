@@ -267,16 +267,16 @@ Create `tests/security/test_prompt_injection.py`.
 
 Refactor `run_single_turn` into clear stages:
 
-- [ ] `load_context`
-- [ ] `select_model`
-- [ ] `apply_input_policy`
-- [ ] `call_model`
-- [ ] `validate_tool_call`
-- [ ] `execute_tool`
-- [ ] `record_tool_result`
-- [ ] `finalize_response`
-- [ ] `persist_turn`
-- [ ] `record_trace`
+- [x] `load_context`
+- [x] `select_model`
+- [x] `apply_input_policy`
+- [x] `call_model`
+- [x] `validate_tool_call`
+- [x] `execute_tool`
+- [x] `record_tool_result`
+- [x] `finalize_response`
+- [x] `persist_turn`
+- [x] `record_trace`
 
 Keep the custom loop if desired. The goal is clarity and testability, not adopting a framework just for a résumé keyword.
 
