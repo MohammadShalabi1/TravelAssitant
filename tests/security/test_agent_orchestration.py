@@ -107,7 +107,7 @@ class AgentOrchestrationTests(unittest.TestCase):
         self.saved_messages: list[tuple[str, str, str, str]] = []
         self.cache_sets = []
         self.patchers = [
-            patch.object(agent_loop, "load_history", lambda _sid, _uid, limit=10: []),
+            patch.object(agent_loop, "load_agent_context", self._agent_context),
             patch.object(agent_loop, "choose_model", self._model_route),
             patch.object(agent_loop, "classify_cache_request", self._cache_policy),
             patch.object(agent_loop, "build_cache_identity", self._cache_identity),
@@ -142,6 +142,14 @@ class AgentOrchestrationTests(unittest.TestCase):
 
     def _cache_identity(self, *_args, **_kwargs):
         return SimpleNamespace(user_scope="global")
+
+    def _agent_context(self, *_args, **_kwargs):
+        return SimpleNamespace(
+            messages=[],
+            summary=None,
+            token_estimate=0,
+            truncated=False,
+        )
 
     def _model_route(self, _message: str, security_restricted: bool = False):
         return SimpleNamespace(
@@ -199,10 +207,10 @@ class AgentOrchestrationTests(unittest.TestCase):
 
         def route(_message: str, security_restricted: bool = False):
             return SimpleNamespace(
-                category=SimpleNamespace(value="itinerary_planning"),
+                category=SimpleNamespace(value="tool_heavy_factual"),
                 model="gemini-test-route",
                 fallback_model="gemini-fallback-route",
-                reason="itinerary_signal",
+                reason="tool_heavy_signal",
             )
 
         with patch.object(agent_loop, "choose_model", route):
@@ -210,6 +218,41 @@ class AgentOrchestrationTests(unittest.TestCase):
 
         self.assertEqual(client.chats.created_with["model"], "gemini-test-route")
         self.assertEqual(len(client.chats.created_with["history"]), 0)
+
+    def test_agent_context_summary_is_sent_to_model_and_hashed(self) -> None:
+        chat = FakeChat([FakeResponse("Final answer")])
+        hashed_contexts = []
+
+        def context(*_args, **_kwargs):
+            return SimpleNamespace(
+                messages=[("user", "recent preference"), ("assistant", "recent answer")],
+                summary=SimpleNamespace(summary="older preference summary"),
+                token_estimate=42,
+                truncated=True,
+            )
+
+        client = FakeClient(chat)
+        with (
+            patch.object(agent_loop, "load_agent_context", context),
+            patch.object(
+                agent_loop,
+                "hash_context",
+                lambda messages: hashed_contexts.append(messages) or "context-hash",
+            ),
+        ):
+            agent_loop.run_single_turn(SESSION, USER, "continue", client)
+
+        created_history = client.chats.created_with["history"]
+        self.assertEqual(len(created_history), 3)
+        self.assertIn("older preference summary", created_history[0].parts[0].text)
+        self.assertEqual(
+            hashed_contexts,
+            [[
+                ("summary", "older preference summary"),
+                ("user", "recent preference"),
+                ("assistant", "recent answer"),
+            ]],
+        )
 
     def test_model_route_metadata_is_recorded(self) -> None:
         chat = FakeChat([FakeResponse("Final answer")])
@@ -248,10 +291,10 @@ class AgentOrchestrationTests(unittest.TestCase):
 
         def route(_message: str, security_restricted: bool = False):
             return SimpleNamespace(
-                category=SimpleNamespace(value="itinerary_planning"),
+                category=SimpleNamespace(value="tool_heavy_factual"),
                 model="primary-model",
                 fallback_model="fallback-model",
-                reason="itinerary_signal",
+                reason="tool_heavy_signal",
             )
 
         with (
@@ -273,11 +316,40 @@ class AgentOrchestrationTests(unittest.TestCase):
         )
         self.assertEqual(
             fallback_records,
-            [("itinerary_planning", "primary-model", "fallback-model")],
+            [("tool_heavy_factual", "primary-model", "fallback-model")],
         )
         self.assertEqual(
             [(role, content) for *_ids, role, content in self.saved_messages],
             [("user", "plan Rome"), ("assistant", "Fallback answer")],
+        )
+
+    def test_model_provider_error_returns_safe_chat_fallback(self) -> None:
+        class ProviderFailingChat(FakeChat):
+            def send_message(self, message: str) -> FakeResponse:
+                self.messages.append(message)
+                raise RuntimeError("API_KEY_INVALID")
+
+        def route(_message: str, security_restricted: bool = False):
+            return SimpleNamespace(
+                category=SimpleNamespace(value="itinerary_planning"),
+                model="broken-model",
+                fallback_model="broken-model",
+                reason="itinerary_signal",
+            )
+
+        with patch.object(agent_loop, "choose_model", route):
+            result = agent_loop.run_single_turn(
+                SESSION,
+                USER,
+                "plan Rome",
+                FakeClient(ProviderFailingChat([])),
+            )
+
+        self.assertEqual(result["text"], agent_loop.PROVIDER_UNAVAILABLE_TEXT)
+        self.assertEqual(result["tools_used"], [])
+        self.assertEqual(
+            [(role, content) for *_ids, role, content in self.saved_messages],
+            [("user", "plan Rome"), ("assistant", agent_loop.PROVIDER_UNAVAILABLE_TEXT)],
         )
 
     def test_tool_calls_are_executed_and_tool_results_are_persisted(self) -> None:

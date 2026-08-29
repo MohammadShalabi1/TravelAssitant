@@ -303,13 +303,13 @@ The current router always returns one model.
 **Level: MID**  
 **Terms:** context budget, sliding window, summarization memory, token budget, conversation state.
 
-- [ ] Fix history retrieval so the agent receives the **most recent** N messages, not simply the first N records.
-- [ ] Add a token-based context budget instead of only a message-count limit.
-- [ ] Exclude internal tool traces that do not help the next turn.
-- [ ] Add optional rolling conversation summary for long sessions.
-- [ ] Persist summary version and timestamp.
-- [ ] Keep user-scoped memory separate from global knowledge.
-- [ ] Add tests for long conversations and context truncation.
+- [x] Fix history retrieval so the agent receives the **most recent** N messages, not simply the first N records.
+- [x] Add a token-based context budget instead of only a message-count limit.
+- [x] Exclude internal tool traces that do not help the next turn.
+- [x] Add optional rolling conversation summary for long sessions.
+- [x] Persist summary version and timestamp.
+- [x] Keep user-scoped memory separate from global knowledge.
+- [x] Add tests for long conversations and context truncation.
 
 ---
 
@@ -331,11 +331,11 @@ Example structure:
 
 Tasks:
 
-- [ ] Add `TripPlan` / `ItineraryDay` schemas.
-- [ ] Validate model output.
-- [ ] Retry once with schema-repair instructions if invalid.
-- [ ] Fall back safely if structured generation fails.
-- [ ] Keep the public response readable.
+- [x] Add `TripPlan` / `ItineraryDay` schemas.
+- [x] Validate model output.
+- [x] Retry once with schema-repair instructions if invalid.
+- [x] Fall back safely if structured generation fails.
+- [x] Keep the public response readable.
 
 ---
 
