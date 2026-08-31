@@ -20,17 +20,19 @@ New vs original:
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import time
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
-from typing import Optional
+from typing import AsyncIterator, Optional
 
 import psycopg2
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
+from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, PlainTextResponse
+from fastapi.openapi.utils import get_openapi
+from fastapi.responses import JSONResponse, PlainTextResponse, StreamingResponse
 from google import genai
 from pydantic import BaseModel, Field
 
@@ -58,11 +60,22 @@ from core.auth import (
     register_user,
 )
 from backend.core.client_ip import get_client_ip, get_cors_config
+from backend.core.concurrency import SessionBusyError, acquire_session_lock, release_session_lock
+from backend.core.db import close_pool, init_pool, readiness_check
+from backend.core.idempotency import (
+    IdempotencyConflictError,
+    begin_request,
+    complete_request,
+    fail_request,
+)
 from core.logger import get_logger
+from backend.core.redis_client import redis_ready
 from backend.core.metrics import get_metrics, prometheus_export, record_prompt_guard
 from core.rate_limit import (
     MAX_INPUT_LENGTH,
+    check_ai_user_rate_limit,
     check_ip_rate_limit,
+    check_register_rate_limit,
     check_rate_limit,
     check_spam,
     ip_requests_remaining,
@@ -84,6 +97,10 @@ def _raise_session_not_found() -> None:
     raise HTTPException(status_code=404, detail="Session not found")
 
 
+api_v1 = APIRouter(prefix="/api/v1")
+legacy_api = APIRouter(prefix="/api")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global gemini_client
@@ -91,6 +108,7 @@ async def lifespan(app: FastAPI):
     missing  = [k for k in required if not os.getenv(k)]
     if missing:
         raise RuntimeError(f"Missing required environment variables: {missing}")
+    init_pool()
     init_db()
     init_auth_db()
     gemini_client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
@@ -98,6 +116,7 @@ async def lifespan(app: FastAPI):
     log.info("✅ Gemini client ready")
     yield
     executor.shutdown(wait=False)
+    close_pool()
     log.info("🛑 Server shutting down")
 
 
@@ -114,6 +133,15 @@ app.add_middleware(
     allow_headers=cors_config.allow_headers,
     expose_headers=cors_config.expose_headers,
 )
+
+
+@app.middleware("http")
+async def legacy_api_deprecation_headers(request: Request, call_next):
+    response = await call_next(request)
+    if request.url.path.startswith("/api/") and not request.url.path.startswith("/api/v1/"):
+        response.headers["Deprecation"] = "true"
+        response.headers["Link"] = '</api/v1>; rel="successor-version"'
+    return response
 
 
 @app.exception_handler(Exception)
@@ -166,28 +194,71 @@ class HealthStatus(BaseModel):
     uptime_s: float
 
 
+class ErrorResponse(BaseModel):
+    error: str
+    message: str
+
+
+def custom_openapi():
+    if app.openapi_schema:
+        return app.openapi_schema
+    schema = get_openapi(
+        title=app.title,
+        version=app.version,
+        description=(
+            "Rihla public API. Canonical application routes live under /api/v1; "
+            "legacy /api aliases are deprecated for one release."
+        ),
+        routes=app.routes,
+    )
+    schema.setdefault("components", {}).setdefault("schemas", {})["ErrorResponse"] = ErrorResponse.model_json_schema()
+    schema["components"]["examples"] = {
+        "RateLimited": {"value": {"error": "rate_limited", "message": "Retry after the provided number of seconds."}},
+        "IdempotencyConflict": {"value": {"error": "idempotency_conflict", "message": "Idempotency-Key was reused with a different request body."}},
+        "SessionBusy": {"value": {"error": "session_busy", "message": "Another message is already running for this session."}},
+    }
+    app.openapi_schema = schema
+    return app.openapi_schema
+
+
+app.openapi = custom_openapi
+
+
 # ── Auth (public) ─────────────────────────────────────────────────────────────
 
-@app.post("/api/auth/register", response_model=AuthResponse, status_code=201, tags=["auth"])
-def api_register(req: RegisterRequest, response: Response):
+@api_v1.post("/auth/register", response_model=AuthResponse, status_code=201, tags=["auth"])
+@legacy_api.post("/auth/register", response_model=AuthResponse, status_code=201, tags=["auth"], include_in_schema=False)
+def api_register(req: RegisterRequest, request: Request, response: Response):
+    client_ip = get_client_ip(request)
+    register_limit = check_register_rate_limit(f"{req.email}:{client_ip}")
+    if not register_limit.allowed:
+        raise HTTPException(
+            status_code=429,
+            detail="Too many registration attempts",
+            headers={"Retry-After": str(register_limit.retry_after_seconds)},
+        )
     return register_user(req, response)
 
-@app.post("/api/auth/login", response_model=AuthResponse, tags=["auth"])
+@api_v1.post("/auth/login", response_model=AuthResponse, tags=["auth"])
+@legacy_api.post("/auth/login", response_model=AuthResponse, tags=["auth"], include_in_schema=False)
 def api_login(req: LoginRequest, request: Request, response: Response):
     return login_user(req, request, response)
 
-@app.post("/api/auth/refresh", response_model=AuthResponse, tags=["auth"])
+@api_v1.post("/auth/refresh", response_model=AuthResponse, tags=["auth"])
+@legacy_api.post("/auth/refresh", response_model=AuthResponse, tags=["auth"], include_in_schema=False)
 def api_refresh(request: Request, response: Response):
     return refresh_user_session(request, response)
 
-@app.post("/api/auth/logout", tags=["auth"])
+@api_v1.post("/auth/logout", tags=["auth"])
+@legacy_api.post("/auth/logout", tags=["auth"], include_in_schema=False)
 def api_logout(request: Request, response: Response):
     return logout_user(request, response)
 
 
 # ── Sessions (protected) ──────────────────────────────────────────────────────
 
-@app.post("/api/sessions", response_model=NewSessionResponse, status_code=201, tags=["sessions"])
+@api_v1.post("/sessions", response_model=NewSessionResponse, status_code=201, tags=["sessions"])
+@legacy_api.post("/sessions", response_model=NewSessionResponse, status_code=201, tags=["sessions"], include_in_schema=False)
 def new_session(current_user: CurrentUser = Depends(get_current_user)):
     try:
         session_id = create_session(user_id=current_user.user_id)
@@ -195,7 +266,8 @@ def new_session(current_user: CurrentUser = Depends(get_current_user)):
     except psycopg2.Error as e:
         raise HTTPException(status_code=503, detail=f"Database error: {e}")
 
-@app.get("/api/sessions", response_model=SessionsListResponse, tags=["sessions"])
+@api_v1.get("/sessions", response_model=SessionsListResponse, tags=["sessions"])
+@legacy_api.get("/sessions", response_model=SessionsListResponse, tags=["sessions"], include_in_schema=False)
 def list_sessions(current_user: CurrentUser = Depends(get_current_user)):
     try:
         rows = get_all_sessions(user_id=current_user.user_id)
@@ -206,7 +278,8 @@ def list_sessions(current_user: CurrentUser = Depends(get_current_user)):
         SessionItem(session_id=str(r["session_id"]), created_at=str(r["created_at"])) for r in rows
     ])
 
-@app.patch("/api/sessions/{session_id}/rename", status_code=204, tags=["sessions"])
+@api_v1.patch("/sessions/{session_id}/rename", status_code=204, tags=["sessions"])
+@legacy_api.patch("/sessions/{session_id}/rename", status_code=204, tags=["sessions"], include_in_schema=False)
 def api_rename(session_id: str, req: RenameRequest,
                current_user: CurrentUser = Depends(get_current_user)):
     try:
@@ -216,7 +289,8 @@ def api_rename(session_id: str, req: RenameRequest,
     if not renamed:
         _raise_session_not_found()
 
-@app.delete("/api/sessions/{session_id}", status_code=204, tags=["sessions"])
+@api_v1.delete("/sessions/{session_id}", status_code=204, tags=["sessions"])
+@legacy_api.delete("/sessions/{session_id}", status_code=204, tags=["sessions"], include_in_schema=False)
 def api_delete(session_id: str, current_user: CurrentUser = Depends(get_current_user)):
     try:
         deleted = delete_session(session_id, current_user.user_id)
@@ -228,10 +302,12 @@ def api_delete(session_id: str, current_user: CurrentUser = Depends(get_current_
 
 # ── Chat (protected) ──────────────────────────────────────────────────────────
 
-@app.post("/api/chat", response_model=ChatResponse, tags=["chat"])
+@api_v1.post("/chat", response_model=ChatResponse, tags=["chat"])
+@legacy_api.post("/chat", response_model=ChatResponse, tags=["chat"], include_in_schema=False)
 async def chat(
     req: Request,
     body: ChatRequest,
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
     current_user: CurrentUser = Depends(get_current_user),
 ):
     client_ip = get_client_ip(req)
@@ -246,6 +322,13 @@ async def chat(
         raise HTTPException(
             status_code=429,
             detail={"error": "spam_detected", "message": "Too many identical messages."},
+        )
+    ai_limit = check_ai_user_rate_limit(current_user.user_id)
+    if not ai_limit.allowed:
+        raise HTTPException(
+            status_code=429,
+            detail={"error": "user_ai_rate_limited", "retry_after_seconds": ai_limit.retry_after_seconds},
+            headers={"Retry-After": str(ai_limit.retry_after_seconds)},
         )
     ok, reason = validate_input(body.message)
     if not ok:
@@ -272,41 +355,128 @@ async def chat(
         if get_owned_conversation_id(body.session_id, current_user.user_id) is None:
             _raise_session_not_found()
         if not check_rate_limit(body.session_id):
+            retry_after = time_remaining(body.session_id)
             raise HTTPException(
                 status_code=429,
                 detail={"error": "session_rate_limited",
-                        "retry_after_seconds": time_remaining(body.session_id)},
+                        "retry_after_seconds": retry_after},
+                headers={"Retry-After": str(retry_after)},
             )
-        loop = asyncio.get_event_loop()
-        result = await loop.run_in_executor(
-            executor,
-            run_single_turn,
-            body.session_id,
+        stored = begin_request(
             current_user.user_id,
-            body.message,
-            gemini_client,
-            prompt_risk.action == "allow_with_restrictions",
+            idempotency_key,
+            body.model_dump(),
         )
-        return ChatResponse(**result, session_id=body.session_id)
+        if stored and stored.response:
+            return ChatResponse(**stored.response)
+        if stored and stored.in_progress:
+            raise HTTPException(status_code=409, detail="Identical request is already in progress.")
+        lock = acquire_session_lock(body.session_id)
+        loop = asyncio.get_event_loop()
+        try:
+            result = await loop.run_in_executor(
+                executor,
+                run_single_turn,
+                body.session_id,
+                current_user.user_id,
+                body.message,
+                gemini_client,
+                prompt_risk.action == "allow_with_restrictions",
+            )
+        finally:
+            release_session_lock(lock)
+        response_payload = {**result, "session_id": body.session_id}
+        complete_request(current_user.user_id, idempotency_key, response_payload)
+        return ChatResponse(**response_payload)
+    except IdempotencyConflictError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    except SessionBusyError as e:
+        raise HTTPException(status_code=409, detail=str(e), headers={"Retry-After": "5"})
     except psycopg2.Error as e:
+        fail_request(current_user.user_id, idempotency_key)
         raise HTTPException(status_code=503, detail=f"Database error: {e}")
     except TimeoutError:
+        fail_request(current_user.user_id, idempotency_key)
         raise HTTPException(status_code=504, detail="Gemini request timed out.")
     except HTTPException:
         raise
     except Exception as e:
+        fail_request(current_user.user_id, idempotency_key)
         log.exception(f"Chat error session={body.session_id}")
         raise HTTPException(status_code=500, detail=safe_error_message())
+
+
+def _sse(event: str, payload: dict) -> str:
+    return f"event: {event}\ndata: {json.dumps(payload, separators=(',', ':'))}\n\n"
+
+
+async def _stream_chat_events(
+    request: Request,
+    body: ChatRequest,
+    current_user: CurrentUser,
+) -> AsyncIterator[str]:
+    started = time.time()
+    yield _sse("turn_started", {"session_id": body.session_id})
+    try:
+        response = await chat(request, body, None, current_user)
+        payload = response.model_dump() if isinstance(response, BaseModel) else dict(response)
+        for tool_name in payload.get("tools_used", []):
+            yield _sse("tool_started", {"tool": tool_name})
+            yield _sse("tool_completed", {"tool": tool_name})
+        text = payload.get("text", "")
+        first_token_ms = None
+        for index in range(0, len(text), 80):
+            if await request.is_disconnected():
+                return
+            if first_token_ms is None:
+                first_token_ms = round((time.time() - started) * 1000, 1)
+            yield _sse("message_delta", {"text": text[index:index + 80]})
+            await asyncio.sleep(0)
+        yield _sse(
+            "turn_completed",
+            {
+                "session_id": body.session_id,
+                "cached": payload.get("cached", False),
+                "tools_used": payload.get("tools_used", []),
+                "time_to_first_token_ms": first_token_ms,
+                "latency_ms": round((time.time() - started) * 1000, 1),
+            },
+        )
+    except HTTPException as exc:
+        yield _sse("error", {"status_code": exc.status_code, "message": safe_error_message()})
+    except Exception:
+        log.exception(f"Streaming chat error session={body.session_id}")
+        yield _sse("error", {"status_code": 500, "message": safe_error_message()})
+
+
+@api_v1.post("/chat/stream", tags=["chat"])
+@legacy_api.post("/chat/stream", tags=["chat"], include_in_schema=False)
+async def chat_stream(
+    req: Request,
+    body: ChatRequest,
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    return StreamingResponse(
+        _stream_chat_events(req, body, current_user),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 # ── History (protected, paginated) ────────────────────────────────────────────
 
 
 
-@app.get(
-    "/api/sessions/{session_id}/history",
+@api_v1.get(
+    "/sessions/{session_id}/history",
     response_model=HistoryResponse,
     tags=["sessions"]
+)
+@legacy_api.get(
+    "/sessions/{session_id}/history",
+    response_model=HistoryResponse,
+    tags=["sessions"],
+    include_in_schema=False,
 )
 def get_history(
     session_id: str,
@@ -360,7 +530,8 @@ def get_history(
 
 # ── Export (protected) ────────────────────────────────────────────────────────
 
-@app.get("/api/sessions/{session_id}/export", tags=["sessions"])
+@api_v1.get("/sessions/{session_id}/export", tags=["sessions"])
+@legacy_api.get("/sessions/{session_id}/export", tags=["sessions"], include_in_schema=False)
 def export_session(session_id: str,
                    current_user: CurrentUser = Depends(get_current_user)):
     """Export full conversation as downloadable JSON."""
@@ -379,25 +550,32 @@ def export_session(session_id: str,
 
 # ── Health + Observability (public) ──────────────────────────────────────────
 
-@app.get("/health", response_model=HealthStatus, tags=["ops"])
+@app.get("/health/live", tags=["ops"])
+def live():
+    return {"status": "ok", "uptime_s": round(time.time() - _start_time, 1)}
+
+
+@app.get("/health/ready", response_model=HealthStatus, tags=["ops"])
+@app.get("/health", response_model=HealthStatus, tags=["ops"], include_in_schema=False)
 def health():
     db_ok, gemini_ok = "ok", "ok"
-    try:
-        conn = psycopg2.connect(os.environ["DATABASE_URL"])
-        conn.close()
-    except Exception as e:
-        db_ok = f"error: {e}"
-        log.error(f"Health DB probe failed: {e}")
+    if not readiness_check():
+        db_ok = "error"
     if gemini_client is None:
         gemini_ok = "not initialised"
     status = "ok" if db_ok == "ok" and gemini_ok == "ok" else "degraded"
     return HealthStatus(status=status, db=db_ok, gemini=gemini_ok,
                         uptime_s=round(time.time() - _start_time, 1))
 
-@app.get("/api/metrics", tags=["ops"])
+@api_v1.get("/metrics", tags=["ops"])
+@legacy_api.get("/metrics", tags=["ops"], include_in_schema=False)
 def api_metrics():
     return get_metrics()
 
 @app.get("/metrics", response_class=PlainTextResponse, tags=["ops"])
 def prom_metrics():
     return prometheus_export()
+
+
+app.include_router(api_v1)
+app.include_router(legacy_api)

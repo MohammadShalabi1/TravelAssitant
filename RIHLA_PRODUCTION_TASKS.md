@@ -345,27 +345,27 @@ Tasks:
 
 Create `evals/`.
 
-- [ ] Build at least 50 representative prompts across:
-  - [ ] weather
-  - [ ] nearby restaurants/cafes
-  - [ ] ambiguous locations
-  - [ ] normal travel questions
-  - [ ] multi-turn context
-  - [ ] unavailable tool/provider
-  - [ ] adversarial/prompt-injection cases
-- [ ] Store expected behavior, not only exact expected text.
-- [ ] Measure:
-  - [ ] tool-selection accuracy
-  - [ ] tool-argument validity
-  - [ ] groundedness against tool output
-  - [ ] answer completeness
-  - [ ] prompt-injection ASR
-  - [ ] P50/P95 latency
-  - [ ] tokens/request
-  - [ ] estimated model cost/request
-  - [ ] cache hit rate
-- [ ] Add a regression threshold so quality cannot silently fall after prompt/model changes.
-- [ ] Version system prompts and evaluation results.
+- [x] Build at least 50 representative prompts across:
+  - [x] weather
+  - [x] nearby restaurants/cafes
+  - [x] ambiguous locations
+  - [x] normal travel questions
+  - [x] multi-turn context
+  - [x] unavailable tool/provider
+  - [x] adversarial/prompt-injection cases
+- [x] Store expected behavior, not only exact expected text.
+- [x] Measure:
+  - [x] tool-selection accuracy
+  - [x] tool-argument validity
+  - [x] groundedness against tool output
+  - [x] answer completeness
+  - [x] prompt-injection ASR
+  - [x] P50/P95 latency
+  - [x] tokens/request
+  - [x] estimated model cost/request
+  - [x] cache hit rate
+- [x] Add a regression threshold so quality cannot silently fall after prompt/model changes.
+- [x] Version system prompts and evaluation results.
 
 ---
 
@@ -373,19 +373,19 @@ Create `evals/`.
 **Level: MID**  
 **Terms:** SSE, time-to-first-token, cancellation, backpressure.
 
-- [ ] Add a streaming chat endpoint using Server-Sent Events.
-- [ ] Stream token/text deltas.
-- [ ] Emit structured lifecycle events:
+- [x] Add a streaming chat endpoint using Server-Sent Events.
+- [x] Stream token/text deltas.
+- [x] Emit structured lifecycle events:
   - `turn_started`
   - `tool_started`
   - `tool_completed`
   - `message_delta`
   - `turn_completed`
   - `error`
-- [ ] Do not expose private tool internals or chain-of-thought.
-- [ ] Support client cancellation.
-- [ ] Record time-to-first-token and total latency.
-- [ ] Update React UI to render streamed responses.
+- [x] Do not expose private tool internals or chain-of-thought.
+- [x] Support client cancellation.
+- [x] Record time-to-first-token and total latency.
+- [x] Update React UI to render streamed responses.
 
 ---
 
@@ -426,10 +426,10 @@ backend/
     metrics.py
 ```
 
-- [ ] Keep HTTP concerns out of repositories.
-- [ ] Keep SQL out of route handlers.
-- [ ] Keep external API calls behind integration adapters.
-- [ ] Inject dependencies where practical for testability.
+- [x] Keep HTTP concerns out of repositories.
+- [x] Keep SQL out of route handlers.
+- [x] Keep external API calls behind integration adapters.
+- [x] Inject dependencies where practical for testability.
 
 ---
 
@@ -437,15 +437,15 @@ backend/
 **Level: MID**  
 **Terms:** schema migration, connection pool, transaction boundary, rollback.
 
-- [ ] Stop modifying schema during normal request paths.
-- [ ] Move schema creation/changes to Alembic migrations.
-- [ ] Create an initial migration for users, conversations, messages, and indexes.
-- [ ] Add the session `name` column through a migration, not inside rename requests.
-- [ ] Use a PostgreSQL connection pool.
-- [ ] Define transaction boundaries for multi-step writes.
-- [ ] Add rollback behavior on partial failures.
-- [ ] Add DB readiness check.
-- [ ] Test migrations against a fresh database.
+- [x] Stop modifying schema during normal request paths.
+- [x] Move schema creation/changes to Alembic migrations.
+- [x] Create an initial migration for users, conversations, messages, and indexes.
+- [x] Add the session `name` column through a migration, not inside rename requests.
+- [x] Use a PostgreSQL connection pool.
+- [x] Define transaction boundaries for multi-step writes.
+- [x] Add rollback behavior on partial failures.
+- [x] Add DB readiness check.
+- [x] Test migrations against a fresh database.
 
 ---
 
@@ -453,18 +453,18 @@ backend/
 **Level: MID**  
 Current in-memory limits are process-local and break under multiple workers/instances.
 
-- [ ] Move IP/user/session rate-limit state to Redis.
-- [ ] Prefer atomic Redis operations/Lua script or a proven limiter.
-- [ ] Rate-limit by:
+- [x] Move IP/user/session rate-limit state to Redis.
+- [x] Prefer atomic Redis operations/Lua script or a proven limiter.
+- [x] Rate-limit by:
   - authenticated user
   - trusted client IP
   - expensive AI endpoint
-- [ ] Return standard `Retry-After`.
-- [ ] Add separate limits for login/register.
-- [ ] Define behavior when Redis is down:
+- [x] Return standard `Retry-After`.
+- [x] Add separate limits for login/register.
+- [x] Define behavior when Redis is down:
   - safe local fallback, or
   - fail closed for highly sensitive endpoints
-- [ ] Load test rate limits across multiple workers.
+- [x] Load test rate limits across multiple workers.
 
 ---
 
@@ -474,12 +474,12 @@ Current in-memory limits are process-local and break under multiple workers/inst
 
 Network/client retries should not create duplicate messages or duplicate LLM charges.
 
-- [ ] Accept `Idempotency-Key` on `POST /api/chat`.
-- [ ] Store request hash + result keyed by user + idempotency key.
-- [ ] Return the original result for a repeated identical request.
-- [ ] Reject reuse of the same key with a different request body.
-- [ ] Set an expiry window.
-- [ ] Test concurrent duplicate requests.
+- [x] Accept `Idempotency-Key` on `POST /api/chat`.
+- [x] Store request hash + result keyed by user + idempotency key.
+- [x] Return the original result for a repeated identical request.
+- [x] Reject reuse of the same key with a different request body.
+- [x] Set an expiry window.
+- [x] Test concurrent duplicate requests.
 
 ---
 
@@ -488,11 +488,11 @@ Network/client retries should not create duplicate messages or duplicate LLM cha
 
 Prevent two simultaneous messages from corrupting conversation ordering.
 
-- [ ] Add a Redis distributed lock or optimistic sequence/version per session.
-- [ ] Guarantee deterministic message order.
-- [ ] Reject or queue overlapping turns for the same conversation.
-- [ ] Do not globally block unrelated users/sessions.
-- [ ] Add concurrency tests.
+- [x] Add a Redis distributed lock or optimistic sequence/version per session.
+- [x] Guarantee deterministic message order.
+- [x] Reject or queue overlapping turns for the same conversation.
+- [x] Do not globally block unrelated users/sessions.
+- [x] Add concurrency tests.
 
 ---
 
@@ -500,26 +500,26 @@ Prevent two simultaneous messages from corrupting conversation ordering.
 **Level: MID**  
 **Terms:** timeout budget, retry policy, exponential backoff, jitter, circuit breaker, bulkhead.
 
-- [ ] Use a shared HTTP client with connection pooling.
-- [ ] Set connect/read/total timeouts per provider.
-- [ ] Retry only safe/transient failures.
-- [ ] Add jitter to exponential backoff.
-- [ ] Respect upstream `429` and `Retry-After`.
-- [ ] Add circuit breakers for weather/geocoding/places/Gemini.
-- [ ] Add provider-specific error classes.
-- [ ] Do not use bare `except:` blocks.
-- [ ] Return graceful degraded responses when one provider fails.
-- [ ] Track provider latency/error rate separately.
+- [x] Use a shared HTTP client with connection pooling.
+- [x] Set connect/read/total timeouts per provider.
+- [x] Retry only safe/transient failures.
+- [x] Add jitter to exponential backoff.
+- [x] Respect upstream `429` and `Retry-After`.
+- [x] Add circuit breakers for weather/geocoding/places/Gemini.
+- [x] Add provider-specific error classes.
+- [x] Do not use bare `except:` blocks.
+- [x] Return graceful degraded responses when one provider fails.
+- [x] Track provider latency/error rate separately.
 
 ---
 
 ## 5.7 P2 — API Versioning
 **Level: J+**
 
-- [ ] Move public endpoints under `/api/v1`.
-- [ ] Keep `/health/live` and `/health/ready` outside API versioning.
-- [ ] Add OpenAPI examples and error schemas.
-- [ ] Document backwards compatibility rules.
+- [x] Move public endpoints under `/api/v1`.
+- [x] Keep `/health/live` and `/health/ready` outside API versioning.
+- [x] Add OpenAPI examples and error schemas.
+- [x] Document backwards compatibility rules.
 
 ---
 

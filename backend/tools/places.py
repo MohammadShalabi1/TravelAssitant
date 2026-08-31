@@ -1,4 +1,4 @@
-import requests
+from backend.integrations.http import ProviderUnavailableError, request_json
 from backend.tools.schemas import GetNearbyPlacesInput, NearbyPlaces, POI, PlaceCategory
 
 
@@ -22,13 +22,15 @@ def get_nearby_places(**kwargs):
      """
 
     try:
-        res = requests.post(
+        res = request_json(
+            "overpass",
+            "POST",
             "https://overpass-api.de/api/interpreter",
             data={"data": query},
             timeout=15,
-        ).json()
-    except:
-        return {"places": []}
+        )
+    except ProviderUnavailableError:
+        return {"error": "Places provider is temporarily unavailable.", "places": []}
 
     pois = []
     for e in res.get("elements", []):

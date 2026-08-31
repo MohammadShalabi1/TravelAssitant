@@ -8,6 +8,7 @@ import os
 import secrets
 import time
 from collections import defaultdict, deque
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -20,7 +21,9 @@ from jose import JWTError, jwt
 from pydantic import BaseModel, EmailStr
 
 from backend.core.client_ip import get_client_ip
+from backend.core.db import get_connection
 from backend.core.logger import get_logger
+from backend.core.rate_limit import check_login_rate_limit
 
 log = get_logger(__name__)
 
@@ -46,39 +49,23 @@ _login_failures: dict[str, deque[float]] = defaultdict(deque)
 
 
 def _connect():
-    return psycopg2.connect(DATABASE_URL, cursor_factory=psycopg2.extras.RealDictCursor)
+    return get_connection()
+
+
+@contextmanager
+def _transaction():
+    with _connect() as conn:
+        try:
+            yield conn
+            conn.commit()
+        except Exception:
+            if hasattr(conn, "rollback"):
+                conn.rollback()
+            raise
 
 
 def init_auth_db():
-    with _connect() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                CREATE TABLE IF NOT EXISTS users (
-                    id            BIGSERIAL PRIMARY KEY,
-                    email         TEXT NOT NULL UNIQUE,
-                    password_hash TEXT NOT NULL,
-                    created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
-                );
-                CREATE INDEX IF NOT EXISTS idx_users_email ON users (email);
-
-                CREATE TABLE IF NOT EXISTS auth_sessions (
-                    id                     BIGSERIAL PRIMARY KEY,
-                    user_id                BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-                    refresh_token_hash     TEXT NOT NULL UNIQUE,
-                    csrf_token_hash        TEXT NOT NULL,
-                    expires_at             TIMESTAMPTZ NOT NULL,
-                    revoked_at             TIMESTAMPTZ,
-                    replaced_by_session_id BIGINT REFERENCES auth_sessions(id),
-                    created_at             TIMESTAMPTZ NOT NULL DEFAULT NOW()
-                );
-                CREATE INDEX IF NOT EXISTS idx_auth_sessions_user_id ON auth_sessions (user_id);
-                CREATE INDEX IF NOT EXISTS idx_auth_sessions_refresh_hash
-                    ON auth_sessions (refresh_token_hash);
-                """
-            )
-        conn.commit()
-    log.info("Auth schema initialised")
+    log.info("Auth schema is managed by Alembic migrations; runtime init skipped")
 
 
 def normalize_email(email: str) -> str:
@@ -311,7 +298,7 @@ class AuthResponse(BaseModel):
 def register_user(req: RegisterRequest, response: Response) -> AuthResponse:
     email = normalize_email(req.email)
     validate_password_strength(req.password)
-    with _connect() as conn:
+    with _transaction() as conn:
         with conn.cursor() as cur:
             cur.execute("SELECT id FROM users WHERE email = %s", (email,))
             if cur.fetchone():
@@ -323,7 +310,6 @@ def register_user(req: RegisterRequest, response: Response) -> AuthResponse:
             )
             user_id = cur.fetchone()["id"]
             auth_response = _issue_auth_response(response, user_id, email, cur)
-        conn.commit()
 
     log.info(f"New user registered: {email}")
     return auth_response
@@ -332,10 +318,17 @@ def register_user(req: RegisterRequest, response: Response) -> AuthResponse:
 def login_user(req: LoginRequest, request: Request, response: Response) -> AuthResponse:
     email = normalize_email(req.email)
     rate_key = _login_rate_key(email, request)
+    login_limit = check_login_rate_limit(rate_key)
+    if not login_limit.allowed:
+        raise HTTPException(
+            status_code=429,
+            detail="Too many login attempts",
+            headers={"Retry-After": str(login_limit.retry_after_seconds)},
+        )
     if _login_rate_limited(rate_key):
         raise HTTPException(status_code=429, detail="Too many login attempts")
 
-    with _connect() as conn:
+    with _transaction() as conn:
         with conn.cursor() as cur:
             cur.execute("SELECT id, password_hash FROM users WHERE email = %s", (email,))
             row = cur.fetchone()
@@ -344,7 +337,6 @@ def login_user(req: LoginRequest, request: Request, response: Response) -> AuthR
                 raise HTTPException(status_code=401, detail=AUTH_FAILURE_DETAIL)
             _clear_login_failures(rate_key)
             auth_response = _issue_auth_response(response, row["id"], email, cur)
-        conn.commit()
 
     log.info(f"User logged in: {email}")
     return auth_response
@@ -352,7 +344,7 @@ def login_user(req: LoginRequest, request: Request, response: Response) -> AuthR
 
 def refresh_user_session(request: Request, response: Response) -> AuthResponse:
     refresh_token = _require_refresh_cookie(request)
-    with _connect() as conn:
+    with _transaction() as conn:
         with conn.cursor() as cur:
             session = _get_refresh_session(cur, refresh_token)
             if not session:
@@ -360,12 +352,10 @@ def refresh_user_session(request: Request, response: Response) -> AuthResponse:
                 raise HTTPException(status_code=401, detail="Invalid refresh session")
             if session["revoked_at"] is not None or session["replaced_by_session_id"] is not None:
                 _revoke_all_user_sessions(cur, session["user_id"])
-                conn.commit()
                 _clear_auth_cookies(response)
                 raise HTTPException(status_code=401, detail="Invalid refresh session")
             if _is_expired(session["expires_at"]):
                 _revoke_session(cur, session["id"])
-                conn.commit()
                 _clear_auth_cookies(response)
                 raise HTTPException(status_code=401, detail="Refresh session expired")
 
@@ -387,7 +377,6 @@ def refresh_user_session(request: Request, response: Response) -> AuthResponse:
                 email=session["email"],
                 expires_in=ACCESS_TOKEN_EXPIRE_SECS,
             )
-        conn.commit()
 
     _set_auth_cookies(response, new_refresh_token, new_csrf_token)
     return auth_response
@@ -395,12 +384,11 @@ def refresh_user_session(request: Request, response: Response) -> AuthResponse:
 
 def logout_user(request: Request, response: Response) -> dict:
     refresh_token = _require_refresh_cookie(request)
-    with _connect() as conn:
+    with _transaction() as conn:
         with conn.cursor() as cur:
             session = _get_refresh_session(cur, refresh_token)
             if session and session["revoked_at"] is None:
                 _require_csrf(request, session)
                 _revoke_session(cur, session["id"])
-        conn.commit()
     _clear_auth_cookies(response)
     return {"status": "ok"}

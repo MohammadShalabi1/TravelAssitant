@@ -1,4 +1,4 @@
-import requests
+from backend.integrations.http import ProviderUnavailableError, request_json
 from backend.tools.schemas import Coordinates, GetCoordinatesInput
 
 def get_coordinates(**kwargs):
@@ -6,12 +6,17 @@ def get_coordinates(**kwargs):
 
     url = "https://nominatim.openstreetmap.org/search"
 
-    res = requests.get(
-        url,
-        params={"q": args.location, "format": "json", "limit": 1},
-        headers={"User-Agent": "AI-Agent"},
-        timeout=10,
-    ).json()
+    try:
+        res = request_json(
+            "nominatim",
+            "GET",
+            url,
+            params={"q": args.location, "format": "json", "limit": 1},
+            headers={"User-Agent": "AI-Agent"},
+            timeout=10,
+        )
+    except ProviderUnavailableError:
+        return {"error": "Geocoding provider is temporarily unavailable."}
 
     # ✅ Fix: use args.location
     if not res:

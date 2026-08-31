@@ -1,4 +1,5 @@
 const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+const API_PREFIX = "/api/v1";
 
 let accessToken = null;
 
@@ -61,7 +62,7 @@ async function request(method, path, body = null, options = {}) {
 export async function refreshAuth() {
   const csrfToken = getCookie("csrf_token");
   if (!csrfToken) return null;
-  const res = await fetch(`${BASE_URL}/api/auth/refresh`, {
+  const res = await fetch(`${BASE_URL}${API_PREFIX}/auth/refresh`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "X-CSRF-Token": csrfToken },
     credentials: "include",
@@ -74,7 +75,7 @@ export async function refreshAuth() {
 export async function logoutRequest() {
   const csrfToken = getCookie("csrf_token");
   if (csrfToken) {
-    await fetch(`${BASE_URL}/api/auth/logout`, {
+    await fetch(`${BASE_URL}${API_PREFIX}/auth/logout`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-CSRF-Token": csrfToken },
       credentials: "include",
@@ -84,31 +85,65 @@ export async function logoutRequest() {
 }
 
 export const register = async (email, password) => {
-  const data = await request("POST", "/api/auth/register", { email, password }, { auth: false });
+  const data = await request("POST", `${API_PREFIX}/auth/register`, { email, password }, { auth: false });
   setAccessToken(data.access_token);
   return data;
 };
 
 export const login = async (email, password) => {
-  const data = await request("POST", "/api/auth/login", { email, password }, { auth: false });
+  const data = await request("POST", `${API_PREFIX}/auth/login`, { email, password }, { auth: false });
   setAccessToken(data.access_token);
   return data;
 };
 
-export const createSession = () => request("POST", "/api/sessions");
-export const listSessions = () => request("GET", "/api/sessions");
-export const deleteSession = (id) => request("DELETE", `/api/sessions/${id}`);
+export const createSession = () => request("POST", `${API_PREFIX}/sessions`);
+export const listSessions = () => request("GET", `${API_PREFIX}/sessions`);
+export const deleteSession = (id) => request("DELETE", `${API_PREFIX}/sessions/${id}`);
 export const renameSession = (id, name) =>
-  request("PATCH", `/api/sessions/${id}/rename`, { name });
+  request("PATCH", `${API_PREFIX}/sessions/${id}/rename`, { name });
 
 export const sendMessage = (session_id, message) =>
-  request("POST", "/api/chat", { session_id, message });
+  request("POST", `${API_PREFIX}/chat`, { session_id, message });
+
+export async function sendMessageStream(session_id, message, handlers = {}) {
+  const res = await fetch(`${BASE_URL}${API_PREFIX}/chat/stream`, {
+    method: "POST",
+    headers: authHeaders(true),
+    credentials: "include",
+    body: JSON.stringify({ session_id, message }),
+  });
+  if (!res.ok || !res.body) return handleResponse(res);
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const events = buffer.split("\n\n");
+    buffer = events.pop() || "";
+    for (const raw of events) {
+      const lines = raw.split("\n");
+      const event = lines.find((line) => line.startsWith("event: "))?.slice(7);
+      const dataLine = lines.find((line) => line.startsWith("data: "));
+      const data = dataLine ? JSON.parse(dataLine.slice(6)) : {};
+      if (event === "message_delta") handlers.onDelta?.(data.text || "");
+      if (event === "turn_completed") handlers.onComplete?.(data);
+      if (event === "error") {
+        const error = new Error(data.message || "Streaming request failed");
+        error.status = data.status_code;
+        throw error;
+      }
+    }
+  }
+}
 
 export const getHistory = (session_id, limit = 50, offset = 0) =>
-  request("GET", `/api/sessions/${session_id}/history?limit=${limit}&offset=${offset}`);
+  request("GET", `${API_PREFIX}/sessions/${session_id}/history?limit=${limit}&offset=${offset}`);
 
 export const exportSession = async (session_id) => {
-  const res = await fetch(`${BASE_URL}/api/sessions/${session_id}/export`, {
+  const res = await fetch(`${BASE_URL}${API_PREFIX}/sessions/${session_id}/export`, {
     headers: authHeaders(true),
     credentials: "include",
   });
@@ -121,4 +156,4 @@ export const exportSession = async (session_id) => {
   URL.revokeObjectURL(url);
 };
 
-export const getHealth = () => request("GET", "/health", null, { auth: false });
+export const getHealth = () => request("GET", "/health/ready", null, { auth: false });

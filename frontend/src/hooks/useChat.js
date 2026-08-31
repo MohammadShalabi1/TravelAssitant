@@ -38,14 +38,28 @@ export function useChat() {
     setError(null);
 
     try {
-      const data = await api.sendMessage(sessionId, text);
-      const assistantMsg = {
-        role: "assistant",
-        content: data.text,
-        tools_used: data.tools_used,
-        cached: data.cached,
-      };
-      setMessages((prev) => [...prev, assistantMsg]);
+      let streamed = "";
+      setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
+      await api.sendMessageStream(sessionId, text, {
+        onDelta: (chunk) => {
+          streamed += chunk;
+          setMessages((prev) => [
+            ...prev.slice(0, -1),
+            { ...prev[prev.length - 1], content: streamed },
+          ]);
+        },
+        onComplete: (meta) => {
+          setMessages((prev) => [
+            ...prev.slice(0, -1),
+            {
+              ...prev[prev.length - 1],
+              content: streamed,
+              tools_used: meta.tools_used,
+              cached: meta.cached,
+            },
+          ]);
+        },
+      });
     } catch (e) {
       if (e.status === 429) {
         const secs = e.detail?.retry_after_seconds || 5;

@@ -1,5 +1,6 @@
-import requests, os
+import os
 from dotenv import load_dotenv
+from backend.integrations.http import ProviderUnavailableError, request_json
 from backend.tools.schemas import Weather, GetWeatherInput
 
 load_dotenv()
@@ -9,7 +10,9 @@ def get_current_weather(**kwargs):
     args = GetWeatherInput(**kwargs)
 
     try:
-        res = requests.get(
+        res = request_json(
+            "openweather",
+            "GET",
             "https://api.openweathermap.org/data/2.5/weather",
             params={
                 "lat": args.lat,
@@ -18,9 +21,9 @@ def get_current_weather(**kwargs):
                 "units": "metric",
             },
             timeout=10,
-        ).json()
-    except Exception as e:
-        return {"error": f"Weather API request failed: {str(e)}"}
+        )
+    except ProviderUnavailableError:
+        return {"error": "Weather provider is temporarily unavailable."}
 
     # ✅ API returned error (very important)
     if "main" not in res:

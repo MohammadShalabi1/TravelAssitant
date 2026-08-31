@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import os
 import uuid
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -21,6 +22,7 @@ import psycopg2
 import psycopg2.extras
 from psycopg2.extensions import connection as PGConnection
 from dotenv import load_dotenv
+from backend.core.db import get_connection
 from backend.core.logger import get_logger
 
 log = get_logger(__name__)
@@ -50,73 +52,45 @@ class AgentContext:
 # ── Connection helper ─────────────────────────────────────────────────────────
 
 def _connect() -> PGConnection:
-    return psycopg2.connect(DATABASE_URL, cursor_factory=psycopg2.extras.RealDictCursor)
+    return get_connection()
+
+
+@contextmanager
+def _transaction():
+    with _connect() as conn:
+        try:
+            yield conn
+            conn.commit()
+        except Exception:
+            if hasattr(conn, "rollback"):
+                conn.rollback()
+            raise
 
 
 # ── Schema bootstrap ──────────────────────────────────────────────────────────
 
 def init_db():
     """Create tables + indexes if they don't exist yet."""
-    sql = """
-    CREATE TABLE IF NOT EXISTS conversations (
-        id          BIGSERIAL PRIMARY KEY,
-        session_id  TEXT        NOT NULL UNIQUE,
-        user_id     TEXT,                           -- NULL until auth is added
-        created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        deleted_at  TIMESTAMPTZ                     -- soft-delete
-    );
-    CREATE INDEX IF NOT EXISTS idx_conversations_session_id
-        ON conversations (session_id);
-    CREATE INDEX IF NOT EXISTS idx_conversations_created_at
-        ON conversations (created_at DESC);
-    CREATE INDEX IF NOT EXISTS idx_conversations_user_id
-        ON conversations (user_id)
-        WHERE user_id IS NOT NULL;
-
-    CREATE TABLE IF NOT EXISTS messages (
-        id                BIGSERIAL PRIMARY KEY,
-        conversation_id   BIGINT      NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
-        role              TEXT        NOT NULL,
-        content           TEXT        NOT NULL,
-        created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-    CREATE INDEX IF NOT EXISTS idx_messages_conversation_id
-        ON messages (conversation_id, id ASC);
-    CREATE INDEX IF NOT EXISTS idx_messages_created_at
-        ON messages (created_at DESC);
-
-    CREATE TABLE IF NOT EXISTS conversation_summaries (
-        conversation_id BIGINT PRIMARY KEY REFERENCES conversations(id) ON DELETE CASCADE,
-        summary         TEXT NOT NULL,
-        version         TEXT NOT NULL,
-        updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-    """
-    with _connect() as conn:
-        with conn.cursor() as cur:
-            cur.execute(sql)
-        conn.commit()
-    log.info("Database schema initialised")
+    log.info("Database schema is managed by Alembic migrations; runtime init skipped")
 
 
 # ── Session management ────────────────────────────────────────────────────────
 
 def create_session(user_id: str) -> str:
     session_id = str(uuid.uuid4())
-    with _connect() as conn:
+    with _transaction() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 "INSERT INTO conversations (session_id, user_id) VALUES (%s, %s)",
                 (session_id, user_id),
             )
-        conn.commit()
     log.info(f"Session created: {session_id}")
     return session_id
 
 
 def get_owned_conversation_id(session_id: str, user_id: str) -> int | None:
     """Return the conversation id only when the session belongs to this user."""
-    with _connect() as conn:
+    with _transaction() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 """
@@ -160,7 +134,6 @@ def delete_session(session_id: str, user_id: str) -> bool:
                 (session_id, user_id),
             )
             updated = cur.rowcount
-        conn.commit()
     if updated:
         log.info(f"Session soft-deleted: {session_id}")
     return updated > 0
@@ -172,20 +145,8 @@ def rename_session(session_id: str, user_id: str, name: str) -> bool:
     Requires an ALTER TABLE to add a `name` column — included in init_db
     as a safe migration guard.
     """
-    with _connect() as conn:
+    with _transaction() as conn:
         with conn.cursor() as cur:
-            # idempotent column add
-            cur.execute("""
-                DO $$
-                BEGIN
-                    IF NOT EXISTS (
-                        SELECT 1 FROM information_schema.columns
-                        WHERE table_name='conversations' AND column_name='name'
-                    ) THEN
-                        ALTER TABLE conversations ADD COLUMN name TEXT;
-                    END IF;
-                END$$;
-            """)
             cur.execute(
                 """
                 UPDATE conversations
@@ -197,7 +158,6 @@ def rename_session(session_id: str, user_id: str, name: str) -> bool:
                 (name, session_id, user_id),
             )
             updated = cur.rowcount
-        conn.commit()
     return updated > 0
 
 
@@ -208,13 +168,12 @@ def save_message(session_id: str, user_id: str, role: str, content: str) -> bool
     if conv_id is None:
         log.error(f"save_message: session not found: {session_id}")
         return False
-    with _connect() as conn:
+    with _transaction() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 "INSERT INTO messages (conversation_id, role, content) VALUES (%s, %s, %s)",
                 (conv_id, role, content),
             )
-        conn.commit()
     return True
 
 

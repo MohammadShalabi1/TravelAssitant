@@ -207,10 +207,12 @@ def get_cache(
     identity: CacheIdentity,
     threshold: float = SIMILARITY_THRESHOLD,
 ) -> Optional[str]:
-    query_vec = _encode_query(query)
     r = _get_redis()
 
     if r is None:
+        if not _MEMORY_CACHE:
+            return None
+        query_vec = _encode_query(query)
         return _memory_get(query_vec, identity, threshold)
 
     key = cache_key(identity)
@@ -232,6 +234,7 @@ def get_cache(
         log.debug("[CACHE MISS] reason=identity_mismatch")
         return None
 
+    query_vec = _encode_query(query)
     score = _cosine(query_vec, json.loads(raw["embedding"]))
     if score >= threshold:
         log.info(
@@ -282,14 +285,22 @@ def set_cache(
 def _get_model() -> Any:
     global _model
     if _model is None:
-        from sentence_transformers import SentenceTransformer
+        try:
+            from sentence_transformers import SentenceTransformer
 
-        _model = SentenceTransformer("all-MiniLM-L6-v2")
+            _model = SentenceTransformer("all-MiniLM-L6-v2")
+        except Exception as exc:
+            log.warning(f"Sentence transformer unavailable, using hash embeddings: {exc}")
+            _model = False
     return _model
 
 
 def _encode_query(query: str) -> list:
-    embedding = _get_model().encode(query)
+    model = _get_model()
+    if model is False:
+        digest = hashlib.sha256(normalize_query(query).encode()).digest()
+        return [byte / 255 for byte in digest]
+    embedding = model.encode(query)
     return embedding.tolist() if hasattr(embedding, "tolist") else list(embedding)
 
 

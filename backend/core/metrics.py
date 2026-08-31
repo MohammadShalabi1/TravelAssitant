@@ -34,9 +34,12 @@ _blocked_tool_calls: dict[str, int] = defaultdict(int)
 _model_routes: dict[str, int] = defaultdict(int)
 _model_selections: dict[str, int] = defaultdict(int)
 _model_fallbacks: dict[str, int] = defaultdict(int)
+_provider_calls: dict[str, int] = defaultdict(int)
+_provider_failures: dict[str, int] = defaultdict(int)
 
 # ── Latency sliding window (last 500 requests per endpoint) ──────────────────
 _latencies: dict[str, Deque[float]] = defaultdict(lambda: deque(maxlen=500))
+_provider_latencies: dict[str, Deque[float]] = defaultdict(lambda: deque(maxlen=500))
 
 
 # ── Public recording API ──────────────────────────────────────────────────────
@@ -87,6 +90,14 @@ def record_model_fallback(category: str, from_model: str, to_model: str):
         _model_fallbacks[f"{category}:{from_model}:{to_model}"] += 1
 
 
+def record_provider_call(provider: str, duration_s: float, success: bool = True):
+    with _lock:
+        _provider_calls[provider] += 1
+        _provider_latencies[provider].append(duration_s)
+        if not success:
+            _provider_failures[provider] += 1
+
+
 # ── Snapshot ──────────────────────────────────────────────────────────────────
 
 def _percentile(data: list[float], p: float) -> float:
@@ -122,6 +133,16 @@ def get_metrics() -> dict:
                 "failure_rate": round(_tool_failures.get(tool, 0) / calls, 4) if calls else 0,
             }
 
+        provider_stats = {}
+        for provider, calls in _provider_calls.items():
+            lats = list(_provider_latencies[provider])
+            provider_stats[provider] = {
+                "calls": calls,
+                "failures": _provider_failures.get(provider, 0),
+                "failure_rate": round(_provider_failures.get(provider, 0) / calls, 4) if calls else 0,
+                "p95_ms": round(_percentile(lats, 95) * 1000, 1),
+            }
+
         return {
             "summary": {
                 "total_requests":  total_requests,
@@ -145,6 +166,7 @@ def get_metrics() -> dict:
                 "selected": dict(_model_selections),
                 "fallbacks": dict(_model_fallbacks),
             },
+            "providers": provider_stats,
         }
 
 
@@ -188,5 +210,9 @@ def prometheus_export() -> str:
             "travel_agent_model_fallbacks_total"
             f'{{category="{category}",from_model="{from_model}",to_model="{to_model}"}} {count}'
         )
+    for provider, stats in m["providers"].items():
+        lines.append(f'travel_agent_provider_calls_total{{provider="{provider}"}} {stats["calls"]}')
+        lines.append(f'travel_agent_provider_failures_total{{provider="{provider}"}} {stats["failures"]}')
+        lines.append(f'travel_agent_provider_p95_ms{{provider="{provider}"}} {stats["p95_ms"]}')
 
     return "\n".join(lines) + "\n"
